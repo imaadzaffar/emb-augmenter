@@ -1,8 +1,7 @@
 #----> internal imports
 from inspect import trace
-from datasets.datasets import save_splits
+# from datasets.datasets import save_splits
 from utils.utils import EarlyStopping, get_optim, get_split_loader, print_network
-from utils.loss_func import *
 
 #----> pytorch imports
 import torch
@@ -12,6 +11,7 @@ import torch.nn as nn
 import numpy as np
 import mlflow 
 import os
+from models.dagan import Pix2PixModel
 from sksurv.metrics import concordance_index_censored
 
 def step(cur, args, loss_fn, model, optimizer, train_loader, val_loader, test_loader, early_stopping):
@@ -63,7 +63,7 @@ def init_optim(args, model):
 
 def init_model(args):
     print('\nInit Model...', end=' ')
-    model = DAGAN(args)
+    model = Pix2PixModel(args)
     model = model.to(torch.device('cuda'))
     print_network(args.results_dir, model)
     return model
@@ -78,7 +78,7 @@ def get_splits(datasets, cur, args):
     print('\nTraining Fold {}!'.format(cur))
     print('\nInit train/val/test splits...', end=' ')
     train_split, val_split, test_split = datasets
-    save_splits(datasets, ['train', 'val', 'test'], os.path.join(args.results_dir, 'splits_{}.csv'.format(cur)))
+    # save_splits(datasets, ['train', 'val', 'test'], os.path.join(args.results_dir, 'splits_{}.csv'.format(cur)))
     print('Done!')
     print("Training on {} samples".format(len(train_split)))
     print("Validating on {} samples".format(len(val_split)))
@@ -89,21 +89,22 @@ def train_loop(epoch, cur, model, loader, optimizer, loss_fn):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.train()
 
+    # @TODO: Sum losses
     total_loss = 0.
     
     for batch_idx, data in enumerate(loader):
 
         # @TODO: GAN training goes here. 
-        loss = torch.tensor([0.])
-        loss_value = 0.
-        total_loss += loss_value 
+        original, augmentation = data
+        patch_embs = patch_embs.squeeze().to(device)
+        label = label.to(device)
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        model.set_input()
+        model.optimize_parameters()
 
         if (batch_idx % 20) == 0:
-            print("batch: {}, loss: {:.3f}".format(batch_idx, loss_value))
+            losses = model.get_current_losses()
+            print("batch: {}, loss: {:.3f}".format(batch_idx, losses))
 
     total_loss /= len(loader)
 
@@ -114,18 +115,20 @@ def train_loop(epoch, cur, model, loader, optimizer, loss_fn):
 
     return 0., total_loss
 
-
 def validate(cur, epoch, model, loader, early_stopping, loss_fn = None, results_dir = None):
-
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
 
+    # @TODO: Sum losses
     total_loss = 0.
 
     with torch.no_grad():
-
         for batch_idx, data in enumerate(loader):
             # @TODO: GAN forward pass 
+            model.set_input(data)
+            model.forward()
+
+            # @TODO: Retrieve loss from model
             loss = loss_fn()
             loss_value = loss.item()
             total_loss += loss_value 
@@ -151,16 +154,19 @@ def summary(model, loader, loss_fn):
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
 
+    # @TODO: Sum losses
     total_loss = 0.
 
     with torch.no_grad():
-
         for batch_idx, data in enumerate(loader):
-            pass
             # @TODO: GAN testing 
+            model.set_input(data)
+            model.test()
+
+            # @TODO: Retrieve loss from model
     return None
 
-def train_val_test(datasets, args):
+def train_val_test(datasets, args, cur):
     """   
     Performs train val test for the fold over number of epochs
     """
