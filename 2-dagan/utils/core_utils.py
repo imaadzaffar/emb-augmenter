@@ -11,32 +11,33 @@ import torch.nn as nn
 import numpy as np
 import mlflow 
 import os
-from models.dagan import Pix2PixModel
 from sksurv.metrics import concordance_index_censored
 
-def step(cur, args, loss_fn, model, optimizer, train_loader, val_loader, test_loader, early_stopping):
+def step(cur, args, losses, models, optimizers, train_loader, val_loader, test_loader, early_stopping):
     
     for epoch in range(args.max_epochs):
-        train_loop(epoch, cur, model, train_loader, optimizer, loss_fn)
-        stop = validate(cur, epoch, model, val_loader, early_stopping, loss_fn, args.results_dir)
+        train_loop(epoch, cur, models, train_loader, optimizers, losses)
+        stop = validate(cur, epoch, models, val_loader, early_stopping, losses, args.results_dir)
         if stop: 
             break
 
     if args.early_stopping:
-        model.load_state_dict(torch.load(os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))))
+        models.load_state_dict(torch.load(os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))))
     else:
-        torch.save(model.state_dict(), os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)))
+        torch.save(models.state_dict(), os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)))
 
-    _, val_metric = summary(model, args.model_type, val_loader, loss_fn)
+    _, val_metric = summary(models, args.model_type, val_loader, losses)
     print('Final Val metric: {:.4f}'.format(val_metric))
 
-    results_dict, test_metric, = summary(model, args.model_type, test_loader, loss_fn)
+    results_dict, test_metric, = summary(models, args.model_type, test_loader, losses)
     print('Final Test metric: {:.4f}'.format(test_metric))
 
     mlflow.log_metric("final_val_fold{}".format(cur), val_metric)
     mlflow.log_metric("final_test_fold{}".format(cur), test_metric)
     return val_metric, results_dict, test_metric
 
+
+# helper functions
 def init_early_stopping(args):
     print('\nSetup EarlyStopping...', end=' ')
     if args.early_stopping:
@@ -55,24 +56,36 @@ def init_loaders(args, train_split, val_split, test_split):
     print('Done!')
     return train_loader,val_loader,test_loader
 
-def init_optim(args, model):
-    print('\nInit optimizer ...', end=' ')
-    optimizer = get_optim(model, args)
+def init_optims(args, models):
+    print('\nInit optimizers...', end=' ')
+    optimizers = {
+        "optim_G": torch.optim.Adam(models.netG.parameters(), lr=args.learning_rate, betas=(0.9, 0.999)),
+        "optim_D": torch.optim.Adam(models.netD.parameters(), lr=args.learning_rate, betas=(0.9, 0.999)),
+    }
     print('Done!')
-    return optimizer
 
-def init_model(args):
-    print('\nInit Model...', end=' ')
-    model = Pix2PixModel(args)
-    model = model.to(torch.device('cuda'))
-    print_network(args.results_dir, model)
-    return model
+    return optimizers
 
-def init_loss_function(args):
-    print('\nInit loss function...', end=' ')
-    # @TODO: define loss function. 
-    loss_fn = nn.BCELoss()
-    return loss_fn
+def init_models(args):
+    print('\nInit models...', end=' ')
+    # @TODO: add models for generator and discriminator
+    models = {
+        "net_G": None,
+        "net_D": None,
+    }
+    print_network(args.results_dir, models.net_G)
+    print_network(args.results_dir, models.net_D)
+
+    return models
+
+def init_loss_functions(args):
+    print('\nInit loss functions...', end=' ')
+    losses = {
+        "loss_GAN": nn.BCEWithLogitsLoss(),
+        "loss_L1": torch.nn.L1Loss()
+    }
+
+    return losses
 
 def get_splits(datasets, cur, args):
     print('\nTraining Fold {}!'.format(cur))
@@ -85,25 +98,83 @@ def get_splits(datasets, cur, args):
     print("Testing on {} samples".format(len(test_split)))
     return train_split,val_split,test_split 
 
-def train_loop(epoch, cur, model, loader, optimizer, loss_fn):
+
+# GAN stuff
+def get_target_tensor(self, prediction, target_is_real):
+    """Create label tensors with the same size as the input.
+    Parameters:
+        prediction (tensor) - - tpyically the prediction from a discriminator
+        target_is_real (bool) - - if the ground truth label is for real images or fake images
+    Returns:
+        A label tensor filled with ground truth label, and with the size of the input
+    """
+
+    if target_is_real:
+        target_tensor = self.real_label
+    else:
+        target_tensor = self.fake_label
+    return target_tensor.expand_as(prediction)
+
+def forward(net_G, real_A):
+    """Run forward pass; generate fake data from real input data"""
+    return net_G(real_A)  # G(A)
+
+def backward_G(net_D, losses, real_A, real_B, fake_B, lambda_L1 = 100):
+    """Calculate GAN and L1 loss for the generator"""
+    # First, G(A) should fake the discriminator
+    fake_AB = torch.cat((real_A, fake_B), 1)
+    pred_fake = net_D(fake_AB)
+    loss_G_GAN = losses.loss_GAN(pred_fake, True)
+    # Second, G(A) = B
+    loss_G_L1 = losses.loss_L1(fake_B, real_B) * lambda_L1
+    # combine loss and calculate gradients
+    loss_G = loss_G_GAN + loss_G_L1
+    loss_G.backward()
+
+def backward_D(net_D, losses, real_A, real_B, fake_B):
+    """Calculate GAN loss for the discriminator"""
+    # Fake; stop backprop to the generator by detaching fake_B
+    fake_AB = torch.cat((real_A, fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
+    pred_fake = net_D(fake_AB.detach())
+    loss_D_fake = losses.loss_GAN(pred_fake, False)
+    # Real
+    real_AB = torch.cat((real_A, real_B), 1)
+    pred_real = net_D(real_AB)
+    loss_D_real = losses.loss_GAN(pred_real, True)
+    # combine loss and calculate gradients
+    loss_D = (loss_D_fake + loss_D_real) * 0.5
+    loss_D.backward()
+
+
+# train, val, test
+def train_loop(epoch, cur, models, loader, optimizers, losses):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.train()
+    # model.train()
 
     # @TODO: Sum losses
     total_loss = 0.
     
     for batch_idx, data in enumerate(loader):
-
         # @TODO: GAN training goes here. 
-        original, augmentation = data
-        patch_embs = patch_embs.squeeze().to(device)
-        label = label.to(device)
 
-        model.set_input()
-        model.optimize_parameters()
+        original, augmentation = data     # split data
+
+        fake_augmentation = forward(models.net_G, original)                   # compute fake images: G(A)
+
+        # update D
+        # model.set_requires_grad(models.net_D, True)  # enable backprop for D
+        optimizers.optim_D.zero_grad()     # set D's gradients to zero
+        backward_D(models.net_D, losses, original, augmentation, fake_augmentation)                # calculate gradients for D
+        optimizers.optim_D.step()          # update D's weights
+
+        # update G
+        # model.set_requires_grad(models.net_D, False)  # D requires no gradients when optimizing G
+        optimizers.optim_G.zero_grad()        # set G's gradients to zero
+        backward_G(models.net_D, losses, original, augmentation, fake_augmentation)                   # calculate graidents for G
+        optimizers.optim_G.step()             # udpate G's weights
 
         if (batch_idx % 20) == 0:
-            losses = model.get_current_losses()
+            losses = 0.  # get current losses
             print("batch: {}, loss: {:.3f}".format(batch_idx, losses))
 
     total_loss /= len(loader)
@@ -175,13 +246,13 @@ def train_val_test(datasets, args, cur):
     train_split, val_split, test_split = get_splits(datasets, args)
     
     #----> init loss function
-    loss_fn = init_loss_function(args)
+    losses = init_loss_functions(args)
 
     #----> init model
-    model = init_model(args)
+    models = init_models(args)
     
     #---> init optimizer
-    optimizer = init_optim(args, model)
+    optimizers = init_optims(args, models)
     
     #---> init loaders
     train_loader, val_loader, test_loader = init_loaders(args, train_split, val_split, test_split)
@@ -190,6 +261,6 @@ def train_val_test(datasets, args, cur):
     early_stopping = init_early_stopping(args)
 
     #---> do train val test
-    val_cindex, results_dict, test_cindex = step(cur, args, loss_fn, model, optimizer, train_loader, val_loader, test_loader, early_stopping)
+    val_cindex, results_dict, test_cindex = step(cur, args, losses, models, optimizers, train_loader, val_loader, test_loader, early_stopping)
 
     return results_dict, test_cindex, val_cindex
