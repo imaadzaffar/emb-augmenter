@@ -19,16 +19,16 @@ class DiscriminatorMLP(nn.Module):
             nn.Linear(n_tokens//4, 1)
         ) 
 
-    def forward(self, x, z):
+    def forward(self, x, x_aug):
         """
         Forward pass. 
             Args:
-                - x: original feature [B, 1024 x 1] 
-                - z: random noise [B, 1024 x1]
+                - x: original feature [B x 1024 x 1] 
+                - z: augmented feature [B x 1024 x1]
             Returns:
-                - is_real: augmented version of x [B, 1] 
+                - is_real: if it's real of x [B x 1024] 
         """
-        is_real = torch.cat([x, z], dim=1).squeeze()
+        is_real = torch.cat([x, x_aug], dim=1).squeeze()
         is_real = self.net(is_real)
         return is_real
 
@@ -75,16 +75,16 @@ class DiscriminatorTransformer(nn.Module):
             )
         self.reduce_channel = nn.Linear(emb_dim, 1)
 
-    def forward(self, x, z):
+    def forward(self, x, x_aug):
         """
         Forward pass. 
             Args:
                 - x: original feature [B x 1024 x 1] 
-                - z: random noise [B x 1024 x1]
+                - z: augmented feature [B x 1024 x1]
             Returns:
-                - x_aug: augmented version of x [B x 1024] 
+                - is_real: if it's real of x [B x 1024] 
         """
-        is_real = torch.cat([x, z], dim=2)  # concat original and noise: B x seq_len x 2
+        is_real = torch.cat([x, x_aug], dim=2)  # concat original and noise: B x seq_len x 2
         is_real = torch.permute(is_real, (1, 0, 2))  # seq len first: seq_len x B x 2 
         is_real = self.augment_channel(is_real)  # increase channel: seq_len x B x 8 
         is_real = self.pos_encoding(is_real)  # position encoding: seq_len x B x 8 
