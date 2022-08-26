@@ -30,15 +30,15 @@ def step(cur, args, loss_fn, model, optimizer, train_loader, val_loader, test_lo
 
     val_loss, val_acc, val_kappa, val_auc = summary(model, val_loader, loss_fn)
     print('Final Val loss: {:.4f}'.format(val_loss))
-    print('Final Val acc: {:.4f}'.format(val_acc))
-    print('Final Val kappa: {:.4f}'.format(val_kappa))
-    print('Final Val auc: {:.4f}'.format(val_auc))
+    # print('Final Val acc: {:.4f}'.format(val_acc))
+    # print('Final Val kappa: {:.4f}'.format(val_kappa))
+    # print('Final Val auc: {:.4f}'.format(val_auc))
 
     test_loss, test_acc, test_kappa, test_auc = summary(model, test_loader, loss_fn)
     print('Final Test loss: {:.4f}'.format(test_loss))
-    print('Final Test acc: {:.4f}'.format(test_acc))
-    print('Final Test kappa: {:.4f}'.format(test_kappa))
-    print('Final Test auc: {:.4f}'.format(test_auc))
+    # print('Final Test acc: {:.4f}'.format(test_acc))
+    # print('Final Test kappa: {:.4f}'.format(test_kappa))
+    # print('Final Test auc: {:.4f}'.format(test_auc))
 
     mlflow.log_metric("final_test_loss_fold{}".format(cur), test_loss)
     mlflow.log_metric("final_test_acc_fold{}".format(cur), test_acc)
@@ -163,9 +163,9 @@ def validate(cur, epoch, model, loader, early_stopping, loss_fn = None, results_
     auc = metrics.auc(fpr, tpr)
 
     print('Epoch: {}, val_loss: {:.4f}'.format(epoch, total_loss))
-    print('Epoch: {}, val_acc: {:.4f}'.format(epoch, acc))
-    print('Epoch: {}, val_kappa: {:.4f}'.format(epoch, kappa))
-    print('Epoch: {}, val_auc: {:.4f}'.format(epoch, auc))
+    # print('Epoch: {}, val_acc: {:.4f}'.format(epoch, acc))
+    # print('Epoch: {}, val_kappa: {:.4f}'.format(epoch, kappa))
+    # print('Epoch: {}, val_auc: {:.4f}'.format(epoch, auc))
 
     mlflow.log_metric("val_loss_fold{}".format(cur), total_loss)
     mlflow.log_metric("val_acc_fold{}".format(cur), acc)

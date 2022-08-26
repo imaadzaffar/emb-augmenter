@@ -14,6 +14,7 @@ import math
 from itertools import islice
 import collections
 import mlflow
+from datetime import datetime
 
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -101,6 +102,8 @@ def get_custom_exp_code(args):
     else:
         param_code += "original"
 
+    param_code += "_" + datetime.now().strftime("%Y%m%d-%H%M%S")
+
     #----> Seed 
     param_code += "_s{}".format(args.seed)
 
@@ -113,6 +116,8 @@ def get_custom_exp_code(args):
     #----> Updating
     args.param_code = param_code
     args.dataset_path = dataset_path
+    # args.mlflow_exp_name = args.mflow_exp_name + "_{}".format(param_code)
+    print("PARAM_CODE: " + args.param_code)
 
     return args
 
@@ -179,8 +184,9 @@ def calculate_error(Y_hat, Y):
 	error = 1. - Y_hat.float().eq(Y.float()).float().mean().item()
 	return error
 
-def create_results_dir(args):
-    args.results_dir = os.path.join("./results", args.results_dir) # create an experiment specific subdir in the results dir 
+def create_results_dir(args, results_root_dir):
+    aug_results_dir = args.augmentation_type if args.augmentation_type else 'original'
+    args.results_dir = os.path.join(results_root_dir, aug_results_dir)
     if not os.path.isdir(args.results_dir):
         os.mkdir(args.results_dir)
         #---> add gitignore to results dir
@@ -196,7 +202,8 @@ def create_results_dir(args):
         os.mkdir(args.results_dir)
 
 def print_and_log_experiment(args, settings):
-    with open(args.results_dir + '/experiment_{}.txt'.format(args.augmentation_type), 'w') as f:
+    fname = "experiment_" + args.param_code + ".txt"
+    with open(os.path.join(args.results_dir, fname), 'w') as f:
         print(settings, file=f)
 
     f.close()
@@ -214,4 +221,7 @@ def print_and_log_experiment(args, settings):
     argsDict = vars(args)
     for key, value in argsDict.items():
         mlflow.log_param(key, value)
+    
+def end_run():
+    mlflow.end_run()
 

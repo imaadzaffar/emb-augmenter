@@ -22,6 +22,7 @@ def process_args():
     parser.add_argument('--weighted_sample', action='store_true', default=False, help='enable weighted sampling')
     parser.add_argument('--batch_size', type=int, default=1, help='batch_size')
 
+    parser.add_argument('--num_runs', type=int, default=1, help='number of times to repeat experiment')
     parser.add_argument('--augmentation_type', type=str, default=None, help="Augmentation type [None, 'combined', 'rotation', 'hue', 'sat', 'value', 'zoom']")
     parser.add_argument('--mlflow_exp_name', type=str, default='ABMIL', help='ABMIL, whatever to be created')
 

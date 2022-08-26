@@ -2,6 +2,7 @@ from __future__ import print_function, division
 from cProfile import label
 from multiprocessing.sharedctypes import Value
 import os
+from pickle import NONE
 import pandas as pd
 
 import torch
@@ -53,13 +54,13 @@ class WSIDatasetFactory:
     def return_splits(self, fold_id):
 
         all_splits = pd.read_csv(os.path.join(self.split_dir, 'splits_{}.csv'.format(fold_id)))
-        train_split = self._get_split_from_df(all_splits=all_splits, split_key='train')
+        train_split = self._get_split_from_df(all_splits=all_splits, split_key='train', augmentation_type=self.augmentation_type)
         val_split = self._get_split_from_df(all_splits=all_splits, split_key='val')
         test_split = self._get_split_from_df(all_splits=all_splits, split_key='test')
 
         return train_split, val_split, test_split
 
-    def _get_split_from_df(self, all_splits: dict={}, split_key: str='train', scaler=None):
+    def _get_split_from_df(self, all_splits: dict={}, split_key: str='train', augmentation_type=None, scaler=None):
         split = all_splits[split_key]
         split = split.dropna().reset_index(drop=True)
         split = list(split.values)
@@ -73,7 +74,8 @@ class WSIDatasetFactory:
                 data_dir=self.data_dir,
                 labels=labels,
                 num_classes=self.num_classes,
-                augmentation_type=self.augmentation_type
+                split=split_key,
+                augmentation_type=augmentation_type
             )
         else:
             split_dataset = None
@@ -87,6 +89,7 @@ class WSIDataset(Dataset):
         data_dir, 
         labels,
         num_classes=8,
+        split='train',
         augmentation_type=None
         ): 
 
@@ -96,41 +99,42 @@ class WSIDataset(Dataset):
         self.data_dir = data_dir
         self.labels = labels
         self.num_classes = num_classes
+        self.split = split
         self.augmentation_type = augmentation_type
 
     def __getitem__(self, idx):
 
-        patch_embs = self._load_wsi_from_path(self.labels.iloc[idx]['image_id'], self.augmentation_type)
+        patch_embs = self._load_wsi_from_path(self.labels.iloc[idx]['image_id'])
         label = int(self.labels.iloc[idx]['isup_grade'])
         return patch_embs, label
 
-    def _load_wsi_from_path(self, slide_id, augmentation_type):
+    def _load_wsi_from_path(self, slide_id):
         """
         Load a patch embedding. 
         """
         path = os.path.join(self.data_dir, '{}.pt'.format(slide_id))
         patch_embs = torch.load(path)
 
-        if augmentation_type is None:
-            patch_embs = patch_embs[:, 0, :]  # get the original patch embedding
-        elif augmentation_type == 'rotation':
-            patch_embs = patch_embs[:, 1, :]
-        elif augmentation_type == 'hue':
-            patch_embs = patch_embs[:, 2, :]
-        elif augmentation_type == 'saturation':
-            patch_embs = patch_embs[:, 3, :]
-        elif augmentation_type == 'value':
-            patch_embs = patch_embs[:, 4, :]
-        elif augmentation_type == 'zoom':
-            patch_embs = patch_embs[:, 5, :]
-        elif augmentation_type == 'combined':
-            patch_indices = np.arange(patch_embs.shape[0])
-            aug_indices = np.random.randint(low=6, high=10, size=patch_embs.shape[0])  # get random mixed augmentation for each patch
-            patch_embs = patch_embs[patch_indices, aug_indices, :]
+        if self.augmentation_type is None:
+            return patch_embs[:, 0, :]  # get the original patch embedding
+        elif self.augmentation_type == 'combined':
+            aug_indices = np.random.choice([0, 6, 7, 8, 9], size=patch_embs.shape[0])  # get random mixed augmentation for each patch
+        elif self.augmentation_type == 'rotation':
+            aug_indices = np.random.choice([0, 1], size=patch_embs.shape[0])  # get random augmentation for each patch
+        elif self.augmentation_type == 'hue':
+            aug_indices = np.random.choice([0, 2], size=patch_embs.shape[0])  # get random augmentation for each patch
+        elif self.augmentation_type == 'saturation':
+            aug_indices = np.random.choice([0, 3], size=patch_embs.shape[0])  # get random augmentation for each patch
+        elif self.augmentation_type == 'value':
+            aug_indices = np.random.choice([0, 4], size=patch_embs.shape[0])  # get random augmentation for each patch
+        elif self.augmentation_type == 'zoom':
+            aug_indices = np.random.choice([0, 5], size=patch_embs.shape[0])  # get random augmentation for each patch
         else:
             raise ValueError("Augmentation not recognized.")
 
-        return patch_embs 
+        patch_indices = np.arange(patch_embs.shape[0])
+        patch_embs = patch_embs[patch_indices, aug_indices, :]
+        return patch_embs
     
     def __len__(self):
         return len(list(self.labels['image_id'].values))
