@@ -1,4 +1,5 @@
 #----> internal imports
+from configparser import NoSectionError
 from inspect import trace
 # from datasets.datasets import save_splits
 from utils.utils import EarlyStopping, get_optim, get_split_loader, print_network
@@ -82,7 +83,7 @@ def init_models(args):
 def init_loss_functions(args):
     print('\nInit loss functions...', end=' ')
     loss_fns = {
-        "loss_GAN": nn.BCEWithLogitsLoss(),
+        "loss_GAN": GANLoss(),
         "loss_L1": torch.nn.L1Loss()
     }
 
@@ -101,16 +102,59 @@ def get_splits(datasets, cur, args):
 
 
 # GAN stuff
-def forward(net_G, real_A):
-    """Run forward pass; generate fake data from real input data"""
-    return net_G(real_A)  # G(A)
+class GANLoss(nn.Module):
+    """Define different GAN objectives.
+    The GANLoss class abstracts away the need to create the target label tensor
+    that has the same size as the input.
+    """
+
+    def __init__(self, target_real_label=1.0, target_fake_label=0.0):
+        """ Initialize the GANLoss class.
+        Parameters:
+            target_real_label (bool) - - label for a real image
+            target_fake_label (bool) - - label of a fake image
+        Note: Do not use sigmoid as the last layer of Discriminator.
+        LSGAN needs no sigmoid. vanilla GANs will handle it with BCEWithLogitsLoss.
+        """
+        super(GANLoss, self).__init__()
+        self.register_buffer('real_label', torch.tensor(target_real_label))
+        self.register_buffer('fake_label', torch.tensor(target_fake_label))
+        self.loss = nn.BCEWithLogitsLoss()
+
+    def get_target_tensor(self, prediction, target_is_real):
+        """Create label tensors with the same size as the input.
+        Parameters:
+            prediction (tensor) - - tpyically the prediction from a discriminator
+            target_is_real (bool) - - if the ground truth label is for real images or fake images
+        Returns:
+            A label tensor filled with ground truth label, and with the size of the input
+        """
+
+        if target_is_real:
+            target_tensor = self.real_label
+        else:
+            target_tensor = self.fake_label
+        return target_tensor.expand_as(prediction)
+
+    def __call__(self, prediction, target_is_real):
+        """Calculate loss given Discriminator's output and grount truth labels.
+        Parameters:
+            prediction (tensor) - - tpyically the prediction output from a discriminator
+            target_is_real (bool) - - if the ground truth label is for real images or fake images
+        Returns:
+            the calculated loss.
+        """
+        target_tensor = self.get_target_tensor(prediction, target_is_real)
+        loss = self.loss(prediction, target_tensor)
+        return loss
 
 def calculate_losses_G(net_D, loss_fns, real_A, real_B, fake_B, lambda_L1 = 100):
     """Calculate GAN and L1 loss for the generator"""
     # First, G(A) should fake the discriminator
-    fake_AB = torch.cat((real_A, fake_B), 1)
-    pred_fake = net_D(fake_AB)
+    # we use conditional GANs; we need to feed both input and output to the discriminator
+    pred_fake = net_D.forward(real_A, fake_B)
     loss_G_GAN = loss_fns.loss_GAN(pred_fake, True)
+
     # Second, G(A) = B
     loss_G_L1 = loss_fns.loss_L1(fake_B, real_B) * lambda_L1
     
@@ -119,12 +163,12 @@ def calculate_losses_G(net_D, loss_fns, real_A, real_B, fake_B, lambda_L1 = 100)
 def calculate_losses_D(net_D, loss_fns, real_A, real_B, fake_B):
     """Calculate GAN loss for the discriminator"""
     # Fake; stop backprop to the generator by detaching fake_B
-    fake_AB = torch.cat((real_A, fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
-    pred_fake = net_D(fake_AB.detach())
+    # we use conditional GANs; we need to feed both input and output to the discriminator
+    pred_fake = net_D.forward(real_A, fake_B)
     loss_D_fake = loss_fns.loss_GAN(pred_fake, False)
+
     # Real
-    real_AB = torch.cat((real_A, real_B), 1)
-    pred_real = net_D(real_AB)
+    pred_real = net_D(real_A, real_B)
     loss_D_real = loss_fns.loss_GAN(pred_real, True)
 
     return loss_D_real, loss_D_fake
@@ -144,9 +188,9 @@ def train_loop(epoch, cur, models, loader, optimizers, loss_fns):
     }
     
     for batch_idx, data in enumerate(loader):
-        original, augmentation = data     # split data
+        original, augmentation, noise = data     # split data
 
-        fake_augmentation = forward(models.net_G, original)                   # compute fake images: G(A)
+        fake_augmentation = models.net_G.forward(original, noise)                   # compute fake images: G(A)
 
         # update D
         # model.set_requires_grad(models.net_D, True)  # enable backprop for D
@@ -203,9 +247,9 @@ def validate(cur, epoch, models, loader, early_stopping, loss_fns = None, result
     
     with torch.no_grad():
         for batch_idx, data in enumerate(loader):
-            original, augmentation = data     # split data
+            original, augmentation, noise = data     # split data
 
-            fake_augmentation = forward(models.net_G, original)                   # compute fake images: G(A)
+            fake_augmentation = models.net_G.forward(original, noise)                   # compute fake images: G(A)
 
             # calculate losses
             loss_D_real, loss_D_fake = calculate_losses_D(models.net_D, loss_fns, original, augmentation, fake_augmentation)
@@ -252,9 +296,9 @@ def summary(models, loader, loss_fns):
     
     with torch.no_grad():
         for batch_idx, data in enumerate(loader):
-            original, augmentation = data     # split data
+            original, augmentation, noise = data     # split data
 
-            fake_augmentation = forward(models.net_G, original)                   # compute fake images: G(A)
+            fake_augmentation = models.net_G.forward(original, noise)                   # compute fake images: G(A)
 
             # calculate losses
             loss_D_real, loss_D_fake = calculate_losses_D(models.net_D, loss_fns, original, augmentation, fake_augmentation)
