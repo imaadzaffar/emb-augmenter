@@ -132,12 +132,13 @@ def get_custom_exp_code(args):
     Returns:
         - args (NameSpace)
     """
-    exp_code = '_'.join(args.split_dir.split('_')[:2])
+    # exp_code = '_'.join(args.split_dir.split('_')[:2])
     dataset_path = 'datasets_csv'
     param_code = ''
 
     #----> Study 
-    param_code += args.study + "_"
+    # param_code += exp_code + "_"
+    param_code += "gan"
 
     #----> seed 
     param_code += "_s{}".format(args.seed)
@@ -147,12 +148,11 @@ def get_custom_exp_code(args):
 
     #----> Regularization
     if args.reg_type == 'L1':
-      param_code += '_%sreg%s' % (args.reg_type, format(args.reg, '.0e'))
+      param_code += '_L1'
+    elif args.reg_type == "L2":
+        param_code += "_L2"
 
-    if args.reg and args.reg_type == "L2":
-        param_code += "_l2Weight_{}".format(args.reg)
-
-    param_code += '_%s' % args.which_splits.split("_")[0]
+    # param_code += '_%s' % args.which_splits.split("_")[0]
 
     #----> Batch Size
     param_code += '_b%s' % str(args.batch_size)

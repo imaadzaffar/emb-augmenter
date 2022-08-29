@@ -50,6 +50,7 @@ class PatchDatasetFactory:
 
     def return_splits(self, fold_id):
         all_splits = pd.read_csv(os.path.join(self.split_dir, 'splits_{}.csv'.format(fold_id)))
+        
         train_split = self._get_split_from_df(all_splits=all_splits, split_key='train')
         val_split = self._get_split_from_df(all_splits=all_splits, split_key='val')
         test_split = self._get_split_from_df(all_splits=all_splits, split_key='test')
@@ -63,23 +64,27 @@ class PatchDatasetFactory:
         split = all_splits[split_key]
         split = split.dropna().reset_index(drop=True)
         split = list(split.values)
-        slide_ids = self.labels[self.labels['image_id'].isin(split)]
+        # print("SLIDE_IDS:", split)
 
         # make datasets for each WSI in split
-        if len(slide_ids) > 0:
-            for slide_id in slide_ids:
+        if len(split) > 0:
+            for slide_id in split:
                 #---> create patch dataset
                 split_dataset = PatchDataset(
                     data_dir=self.data_dir,
                     slide_id=slide_id,
                     n_features=self.n_features,
                 )
+                # print("SPLIT DATASET LEN:", len(split_dataset))
                 patch_datasets.append(split_dataset)
         else:
             return None
         
         # concatenate datasets into a single dataset
         patch_dataset = ConcatDataset(patch_datasets)
+
+        # print("PATCH DATASET:", patch_dataset)
+        print("PATCH DATASET LEN:", len(patch_dataset))
 
         return patch_dataset
     
@@ -103,7 +108,7 @@ class PatchDataset(Dataset):
 
     def __getitem__(self, idx):
         original, augmentation  = self._load_patch_pair(idx)
-        noise = torch.randn(self.n_features, 1)
+        noise = torch.randn(self.n_features)
         return original, augmentation, noise 
 
     def _load_patch_pair(self, patch_index):

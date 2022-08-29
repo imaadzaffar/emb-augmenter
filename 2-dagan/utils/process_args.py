@@ -6,12 +6,13 @@ def process_args():
 
     #----> data/ splits args
     parser.add_argument('--data_root_dir', type=str, default=None, help='data directory')
+    parser.add_argument('--csv_fpath', type=str, default=None, help='CSV with labels')
     parser.add_argument('--results_dir', default='./results', help='results directory (default: ./results)')
     parser.add_argument('--split_dir', type=str, default=None, help='manually specify the set of splits to use, ' 
                         +'instead of infering from the task and label_frac argument (default: None)')
 
     #----> training args
-    parser.add_argument('--max_epochs', type=int, default=20, help='maximum number of epochs to train (default: 200)')
+    parser.add_argument('--max_epochs', type=int, default=20, help='maximum number of epochs to train (default: 20)')
     parser.add_argument('--lr', type=float, default=1e-4, help='learning rate (default: 0.0001)')
     parser.add_argument('--seed', type=int, default=1, help='random seed for reproducible experiment (default: 1)')
     parser.add_argument('--early_stopping', action='store_true', default=False, help='enable early stopping')

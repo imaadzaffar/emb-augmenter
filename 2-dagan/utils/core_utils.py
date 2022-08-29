@@ -12,8 +12,8 @@ import torch.nn as nn
 import numpy as np
 import mlflow 
 import os
-from models.discriminator import DiscriminatorMLP
 from models.generator import GeneratorMLP
+from models.discriminator import DiscriminatorMLP
 from sksurv.metrics import concordance_index_censored
 
 def step(cur, args, loss_fns, models, optimizers, train_loader, val_loader, test_loader, early_stopping):
@@ -53,17 +53,17 @@ def init_early_stopping(args):
 
 def init_loaders(args, train_split, val_split, test_split):
     print('\nInit Loaders...', end=' ')
-    train_loader = get_split_loader(args, train_split, training=True, testing = args.testing, batch_size = args.batch_size)
-    val_loader = get_split_loader(args, val_split,  testing = args.testing, batch_size = args.batch_size)
-    test_loader = get_split_loader(args, test_split, testing = args.testing, batch_size = args.batch_size)
+    train_loader = get_split_loader(args, train_split, training=True, batch_size = args.batch_size)
+    val_loader = get_split_loader(args, val_split,  testing=False, batch_size = args.batch_size)
+    test_loader = get_split_loader(args, test_split, testing=False, batch_size = args.batch_size)
     print('Done!')
     return train_loader,val_loader,test_loader
 
 def init_optims(args, models):
     print('\nInit optimizers...', end=' ')
     optimizers = {
-        "optim_G": torch.optim.Adam(models.netG.parameters(), lr=args.learning_rate, betas=(0.9, 0.999)),
-        "optim_D": torch.optim.Adam(models.netD.parameters(), lr=args.learning_rate, betas=(0.9, 0.999)),
+        "optim_G": torch.optim.Adam(models["net_G"].parameters(), lr=args.lr, betas=(0.9, 0.999)),
+        "optim_D": torch.optim.Adam(models["net_D"].parameters(), lr=args.lr, betas=(0.9, 0.999)),
     }
     print('Done!')
 
@@ -75,8 +75,9 @@ def init_models(args):
         "net_G": GeneratorMLP(n_tokens=1024, dropout=0.),
         "net_D": DiscriminatorMLP(n_tokens=1024, dropout=0.),
     }
-    print_network(args.results_dir, models.net_G)
-    print_network(args.results_dir, models.net_D)
+    print(models.keys())
+    print_network(args.results_dir, models["net_G"])
+    print_network(args.results_dir, models["net_D"])
 
     return models
 
@@ -153,10 +154,10 @@ def calculate_losses_G(net_D, loss_fns, real_A, real_B, fake_B, lambda_L1 = 100)
     # First, G(A) should fake the discriminator
     # we use conditional GANs; we need to feed both input and output to the discriminator
     pred_fake = net_D.forward(real_A, fake_B)
-    loss_G_GAN = loss_fns.loss_GAN(pred_fake, True)
+    loss_G_GAN = loss_fns["loss_GAN"](pred_fake, True)
 
     # Second, G(A) = B
-    loss_G_L1 = loss_fns.loss_L1(fake_B, real_B) * lambda_L1
+    loss_G_L1 = loss_fns["loss_L1"](fake_B, real_B) * lambda_L1
     
     return loss_G_GAN, loss_G_L1
 
@@ -165,11 +166,11 @@ def calculate_losses_D(net_D, loss_fns, real_A, real_B, fake_B):
     # Fake; stop backprop to the generator by detaching fake_B
     # we use conditional GANs; we need to feed both input and output to the discriminator
     pred_fake = net_D.forward(real_A, fake_B)
-    loss_D_fake = loss_fns.loss_GAN(pred_fake, False)
+    loss_D_fake = loss_fns["loss_GAN"](pred_fake, False)
 
     # Real
     pred_real = net_D(real_A, real_B)
-    loss_D_real = loss_fns.loss_GAN(pred_real, True)
+    loss_D_real = loss_fns["loss_GAN"](pred_real, True)
 
     return loss_D_real, loss_D_fake
 
@@ -177,8 +178,8 @@ def calculate_losses_D(net_D, loss_fns, real_A, real_B, fake_B):
 # train, val, test
 def train_loop(epoch, cur, models, loader, optimizers, loss_fns):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    models.net_G.train().to(device)
-    models.net_D.train().to(device)
+    models["net_G"].train().to(device)
+    models["net_D"].train().to(device)
 
     total_loss = {
         "loss_D_real": 0.,
@@ -190,26 +191,29 @@ def train_loop(epoch, cur, models, loader, optimizers, loss_fns):
     for batch_idx, data in enumerate(loader):
         original, augmentation, noise = data     # split data
 
-        fake_augmentation = models.net_G.forward(original, noise)                   # compute fake images: G(A)
+        print("ORIGINAL:", original.shape)
+        print("AUGMENTATION:", augmentation.shape)
+        print("NOISE:", noise.shape)
+        fake_augmentation = models["net_G"].forward(original, noise)                   # compute fake images: G(A)
 
         # update D
-        # model.set_requires_grad(models.net_D, True)  # enable backprop for D
-        optimizers.optim_D.zero_grad()     # set D's gradients to zero
-        loss_D_real, loss_D_fake = calculate_losses_D(models.net_D, loss_fns, original, augmentation, fake_augmentation)                # calculate gradients for D
+        # model.set_requires_grad(models["net_D"], True)  # enable backprop for D
+        optimizers["optim_D"].zero_grad()     # set D's gradients to zero
+        loss_D_real, loss_D_fake = calculate_losses_D(models["net_D"], loss_fns, original, augmentation, fake_augmentation)                # calculate gradients for D
         # combine loss and calculate gradients
         loss_D = (loss_D_fake + loss_D_real) * 0.5
         loss_D.backward()
-        optimizers.optim_D.step()          # update D's weights
+        optimizers["optim_D"].step()          # update D's weights
 
         # update G
-        # model.set_requires_grad(models.net_D, False)  # D requires no gradients when optimizing G
-        optimizers.optim_G.zero_grad()        # set G's gradients to zero
-        loss_G_GAN, loss_G_L1 = calculate_losses_G(models.net_D, loss_fns, original, augmentation, fake_augmentation)                   # calculate graidents for G
+        # model.set_requires_grad(models["net_D"], False)  # D requires no gradients when optimizing G
+        optimizers["optim_G"].zero_grad()        # set G's gradients to zero
+        loss_G_GAN, loss_G_L1 = calculate_losses_G(models["net_D"], loss_fns, original, augmentation, fake_augmentation)                   # calculate graidents for G
         # combine loss and calculate gradients
         loss_G = loss_G_GAN + loss_G_L1
         loss_G.backward()
 
-        optimizers.optim_G.step()             # udpate G's weights
+        optimizers["optim_G"].step()             # udpate G's weights
 
         total_loss["loss_D_real"] += loss_D_real
         total_loss["loss_D_fake"] += loss_D_fake
@@ -235,8 +239,8 @@ def train_loop(epoch, cur, models, loader, optimizers, loss_fns):
 
 def validate(cur, epoch, models, loader, early_stopping, loss_fns = None, results_dir = None):
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    models.net_G.eval().to(device)
-    models.net_D.eval().to(device)
+    models["net_G"].eval().to(device)
+    models["net_D"].eval().to(device)
 
     total_loss = {
         "loss_D_real": 0.,
@@ -249,11 +253,11 @@ def validate(cur, epoch, models, loader, early_stopping, loss_fns = None, result
         for batch_idx, data in enumerate(loader):
             original, augmentation, noise = data     # split data
 
-            fake_augmentation = models.net_G.forward(original, noise)                   # compute fake images: G(A)
+            fake_augmentation = models["net_G"].forward(original, noise)                   # compute fake images: G(A)
 
             # calculate losses
-            loss_D_real, loss_D_fake = calculate_losses_D(models.net_D, loss_fns, original, augmentation, fake_augmentation)
-            loss_G_GAN, loss_G_L1 = calculate_losses_G(models.net_D, loss_fns, original, augmentation, fake_augmentation)
+            loss_D_real, loss_D_fake = calculate_losses_D(models["net_D"], loss_fns, original, augmentation, fake_augmentation)
+            loss_G_GAN, loss_G_L1 = calculate_losses_G(models["net_D"], loss_fns, original, augmentation, fake_augmentation)
 
             total_loss["loss_D_real"] += loss_D_real
             total_loss["loss_D_fake"] += loss_D_fake
@@ -284,8 +288,8 @@ def validate(cur, epoch, models, loader, early_stopping, loss_fns = None, result
 
 def summary(models, loader, loss_fns):
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    models.net_G.eval().to(device)
-    models.net_D.eval().to(device)
+    models["net_G"].eval().to(device)
+    models["net_D"].eval().to(device)
 
     total_loss = {
         "loss_D_real": 0.,
@@ -298,11 +302,11 @@ def summary(models, loader, loss_fns):
         for batch_idx, data in enumerate(loader):
             original, augmentation, noise = data     # split data
 
-            fake_augmentation = models.net_G.forward(original, noise)                   # compute fake images: G(A)
+            fake_augmentation = models["net_G"].forward(original, noise)                   # compute fake images: G(A)
 
             # calculate losses
-            loss_D_real, loss_D_fake = calculate_losses_D(models.net_D, loss_fns, original, augmentation, fake_augmentation)
-            loss_G_GAN, loss_G_L1 = calculate_losses_G(models.net_D, loss_fns, original, augmentation, fake_augmentation)
+            loss_D_real, loss_D_fake = calculate_losses_D(models["net_D"], loss_fns, original, augmentation, fake_augmentation)
+            loss_G_GAN, loss_G_L1 = calculate_losses_G(models["net_D"], loss_fns, original, augmentation, fake_augmentation)
 
             total_loss["loss_D_real"] += loss_D_real
             total_loss["loss_D_fake"] += loss_D_fake
@@ -311,13 +315,13 @@ def summary(models, loader, loss_fns):
 
     return total_loss
 
-def train_val_test(datasets, args, cur):
+def train_val_test(train_split, val_split, test_split, args, cur):
     """   
     Performs train val test for the fold over number of epochs
     """
 
     #----> gets splits and summarize
-    train_split, val_split, test_split = get_splits(datasets, args)
+    # train_split, val_split, test_split = get_splits(datasets, args)
     
     #----> init loss function
     loss_fns = init_loss_functions(args)

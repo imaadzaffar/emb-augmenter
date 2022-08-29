@@ -47,24 +47,15 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     args.device = device
-    args.split_dir = "splits"
     args = get_custom_exp_code(args)
     seed_torch(args.seed)
 
-    settings = {'num_splits': args.k, 
-                'k_start': args.k_start,
-                'k_end': args.k_end,
-                'task': args.task,
+    settings = {
                 'max_epochs': args.max_epochs, 
                 'results_dir': args.results_dir, 
                 'lr': args.lr,
-                'experiment': args.study,
-                'reg': args.reg,
-                'label_frac': args.label_frac,
-                'bag_loss': args.bag_loss,
                 'seed': args.seed,
-                'model_type': args.model_type,
-                "use_drop_out": args.drop_out,
+                'use_drop_out': args.drop_out,
                 'weighted_sample': args.weighted_sample,
                 'opt': args.opt}
 
@@ -76,9 +67,14 @@ if __name__ == "__main__":
     print('split_dir: ', args.split_dir)
     settings.update({'split_dir': args.split_dir})
 
+    assert os.path.isfile(args.csv_fpath)
+    print('csv_path: ', args.csv_fpath)
+    settings.update({'csv_path': args.csv_fpath})
+
     #----> create dataset factory (process omics and WSI to create graph)
     args.dataset_factory = PatchDatasetFactory(
-        data_dir=args.data_dir,
+        data_dir=args.data_root_dir,
+        csv_path=args.csv_fpath,
         split_dir=args.split_dir,
         seed = args.seed, 
         print_info = True
