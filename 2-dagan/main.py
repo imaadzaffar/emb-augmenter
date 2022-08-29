@@ -15,27 +15,25 @@ from timeit import default_timer as timer
 
 #----> main
 def main(args):
+    results = []
 
-    train_dataset, val_dataset, test_dataset = args.dataset_factory.return_splits(
-        args,
-        csv_path='{}/splits.csv'.format(args.split_dir)
-    )
+    for fold_id in range(5):  # 5-fold cross validation 
+        train_dataset, val_dataset, test_dataset = args.dataset_factory.return_splits(
+            fold_id,
+        )
+        
+        fold_results  = train_val_test(train_dataset, val_dataset, test_dataset, args, fold_id)
+        print(fold_results)
+        results.append(fold_results)
 
-    datasets = (train_dataset, val_dataset, test_dataset)
+        #write results to pkl
+        filename = os.path.join(args.results_dir, 'split_results.pkl')
+        save_pkl(filename, fold_results)
     
-    results  = train_val_test(datasets, args)
-
-    #write results to pkl
-    filename = os.path.join(args.results_dir, 'split_results.pkl')
-    save_pkl(filename, results)
-
-    # final_df = pd.DataFrame({'folds': folds, 'val_cindex': all_val_cindex, 'test_cindex': all_test_cindex})
-
-    # if len(folds) != args.k:
-    #     save_name = 'summary_partial_{}_{}.csv'.format(start, end)
-    # else:
-    #     save_name = 'summary.csv'
-    # final_df.to_csv(os.path.join(args.results_dir, save_name))
+    # write summary of fold results to csv
+    df = pd.DataFrame.from_records(results)
+    filename = os.path.join(args.results_dir, 'summary.csv')
+    df.to_csv(filename)
 
 
 #----> call main

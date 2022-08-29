@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, ConcatDataset
 
 
 class PatchDatasetFactory:
@@ -57,30 +57,38 @@ class PatchDatasetFactory:
         return train_split, val_split, test_split
 
     def _get_split_from_df(self, all_splits: dict={}, split_key: str='train', scaler=None):
+        patch_datasets = []
+
+        # get all the labels whose case ID is in split
         split = all_splits[split_key]
         split = split.dropna().reset_index(drop=True)
         split = list(split.values)
+        slide_ids = self.labels[self.labels['image_id'].isin(split)]
 
-        # get all the labels whose case ID is in split
-        labels = self.labels[self.labels['image_id'].isin(split)]
-
-        if len(split) > 0:
-            #---> create patch dataset
-            split_dataset = PatchDataset(
-                data_dir=self.data_dir,
-                labels=labels,
-                n_features=self.n_features,
-            )
+        # make datasets for each WSI in split
+        if len(slide_ids) > 0:
+            for slide_id in slide_ids:
+                #---> create patch dataset
+                split_dataset = PatchDataset(
+                    data_dir=self.data_dir,
+                    slide_id=slide_id,
+                    n_features=self.n_features,
+                )
+                patch_datasets.append(split_dataset)
         else:
-            split_dataset = None
+            return None
         
-        return split_dataset
+        # concatenate datasets into a single dataset
+        patch_dataset = ConcatDataset(patch_datasets)
+
+        return patch_dataset
     
 
 class PatchDataset(Dataset):
 
     def __init__(self,
         data_dir, 
+        slide_id,
         n_features=1024,
         ): 
 
@@ -89,28 +97,25 @@ class PatchDataset(Dataset):
         #---> self
         self.data_dir = data_dir
         self.n_features = n_features
+        
+        path = os.path.join(self.data_dir, '{}.pt'.format(slide_id))
+        self.data = torch.load(path)
 
     def __getitem__(self, idx):
-        original, augmentation  = self._load_patch_pair(self.data_dir, self.slide_ids[idx])
+        original, augmentation  = self._load_patch_pair(idx)
         noise = torch.randn(self.n_features, 1)
         return original, augmentation, noise 
 
-    # @TODO: load individual patch embeddings instead of whole slides
-    def _load_patch_pair(self, slide_id, patch_index):
+    def _load_patch_pair(self, patch_index):
         """
         Load a pair of patch embeddings. 
         """
-        path = os.path.join(self.data_dir, 'pt_files', '{}.pt'.format(slide_id.rstrip('.svs')))
-        slide_embs = torch.load(path)
-        patch_embs = slide_embs[patch_index, :, :]
+        patch = self.data[patch_index, :, :]
 
-        original = patch_embs[0, :]  # get the original patch embedding
+        original = patch[0, :]  # get the original patch embedding
+        augmentation = patch[np.random.randint(low=6, high=10), :]  # get a random mixed augmentation
 
-        aug_index = np.random.randint(low=6, high=10)  # get a random mixed augmentation
-        augmentation = patch_embs[aug_index, :]
-
-        return original, augmentation 
+        return original, augmentation
     
-    # @TODO: add length of loader, slides * patches
     def __len__(self):
-        return len(self.slide_ids)  
+        return self.data.shape[0]

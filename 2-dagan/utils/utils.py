@@ -217,11 +217,7 @@ def get_split_loader(args, split_dataset, training = False, testing = False, wei
 
     if not testing:
         if training:
-            if weighted:
-                weights = make_weights_for_balanced_classes_split(split_dataset)
-                loader = DataLoader(split_dataset, batch_size=batch_size, sampler = WeightedRandomSampler(weights, len(weights)), drop_last=True, **kwargs)	
-            else:
-                loader = DataLoader(split_dataset, batch_size=batch_size, sampler = RandomSampler(split_dataset), drop_last=True, **kwargs)
+            loader = DataLoader(split_dataset, batch_size=batch_size, sampler = RandomSampler(split_dataset), drop_last=True, **kwargs)
         else:
             loader = DataLoader(split_dataset, batch_size=batch_size, sampler = SequentialSampler(split_dataset), drop_last=True, **kwargs)
 
