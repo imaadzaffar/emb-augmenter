@@ -12,8 +12,8 @@ import torch.nn as nn
 import numpy as np
 import mlflow 
 import os
-from models.generator import GeneratorMLP
-from models.discriminator import DiscriminatorMLP
+from models.generator import GeneratorMLP, GeneratorTransformer
+from models.discriminator import DiscriminatorMLP, DiscriminatorTransformer
 from sksurv.metrics import concordance_index_censored
 
 def step(cur, args, loss_fns, models, optimizers, train_loader, val_loader, test_loader, early_stopping):
@@ -25,26 +25,29 @@ def step(cur, args, loss_fns, models, optimizers, train_loader, val_loader, test
             break
 
     if args.early_stopping:
-        models.load_state_dict(torch.load(os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))))
+        models_state_dict = torch.load(os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)))
+        models["net_G"].load_state_dict(models_state_dict["G_state_dict"])
+        models["net_D"].load_state_dict(models_state_dict["D_state_dict"])
     else:
-        torch.save(models.state_dict(), os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)))
+        torch.save({"G_state_dict": models["net_G"].state_dict(), "D_state_dict": models["net_D"].state_dict()}, os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)))
 
-    total_val_loss = summary(models, args.model_type, val_loader, loss_fns)
-    print("Final val losses: {}, loss_D_real: {:.3f}, loss_D_fake: {:.3f}, loss_G_GAN: {:.3f}, loss_G_L1: {:.3f}".format(epoch, total_val_loss["loss_D_real"], total_val_loss["loss_D_fake"], total_val_loss["loss_G_GAN"], total_val_loss["loss_G_L1"]))
+    # total_val_loss = summary(models, val_loader, loss_fns)
+    # print("Final val losses: {}, loss_D_real: {:.3f}, loss_D_fake: {:.3f}, loss_G_GAN: {:.3f}, loss_G_L1: {:.3f}".format(epoch, total_val_loss["loss_D_real"], total_val_loss["loss_D_fake"], total_val_loss["loss_G_GAN"], total_val_loss["loss_G_L1"]))
 
-    total_test_loss = summary(models, args.model_type, test_loader, loss_fns)
-    print("Final test losses: {}, loss_D_real: {:.3f}, train_loss_D_fake: {:.3f}, train_loss_G_GAN: {:.3f}, train_loss_G_L1: {:.3f}".format(epoch, total_test_loss["loss_D_real"], total_test_loss["loss_D_fake"], total_test_loss["loss_G_GAN"], total_test_loss["loss_G_L1"]))
+    # total_test_loss = summary(models, test_loader, loss_fns)
+    # print("Final test losses: {}, loss_D_real: {:.3f}, train_loss_D_fake: {:.3f}, train_loss_G_GAN: {:.3f}, train_loss_G_L1: {:.3f}".format(epoch, total_test_loss["loss_D_real"], total_test_loss["loss_D_fake"], total_test_loss["loss_G_GAN"], total_test_loss["loss_G_L1"]))
 
-    mlflow.log_metric("final_val_fold{}".format(cur), total_val_loss)
-    mlflow.log_metric("final_test_fold{}".format(cur), total_test_loss)
-    return None, None, None
+    # mlflow.log_metric("fold{}_final_val_loss_G_GAN".format(cur), total_val_loss["loss_G_GAN"])
+    # mlflow.log_metric("fold{}_final_test_loss_G_GAN".format(cur), total_test_loss["loss_G_GAN"])
+
+    return None, None
 
 
 # helper functions
 def init_early_stopping(args):
     print('\nSetup EarlyStopping...', end=' ')
     if args.early_stopping:
-        early_stopping = EarlyStopping(patience = 20, stop_epoch=50, verbose = True)
+        early_stopping = EarlyStopping(patience=20, stop_epoch=50, verbose = True)
 
     else:
         early_stopping = None
@@ -71,13 +74,21 @@ def init_optims(args, models):
 
 def init_models(args):
     print('\nInit models...', end=' ')
-    models = {
-        "net_G": GeneratorMLP(n_tokens=1024, dropout=0.),
-        "net_D": DiscriminatorMLP(n_tokens=1024, dropout=0.),
-    }
-    print(models.keys())
-    print_network(args.results_dir, models["net_G"])
-    print_network(args.results_dir, models["net_D"])
+    if args.model_type == 'MLP':
+        models = {
+            "net_G": GeneratorMLP(n_tokens=1024, dropout=args.drop_out),
+            "net_D": DiscriminatorMLP(n_tokens=1024, dropout=args.drop_out),
+        }
+    elif args.model_type == 'Transformer':
+        models = {
+            "net_G": GeneratorTransformer(n_tokens=1024, dropout=args.drop_out),
+            "net_D": DiscriminatorTransformer(n_tokens=1024, dropout=args.drop_out),
+        }
+    else:
+        raise ValueError("Invalid model type.")
+    
+    print_network(args.results_dir, models["net_G"], "G")
+    print_network(args.results_dir, models["net_D"], "D")
 
     return models
 
@@ -145,7 +156,11 @@ class GANLoss(nn.Module):
         Returns:
             the calculated loss.
         """
-        target_tensor = self.get_target_tensor(prediction, target_is_real)
+        
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        target_tensor = self.get_target_tensor(prediction, target_is_real).to(device)
+        # print("loss devices:", prediction.device, target_tensor.device)
+
         loss = self.loss(prediction, target_tensor)
         return loss
 
@@ -175,6 +190,13 @@ def calculate_losses_D(net_D, loss_fns, real_A, real_B, fake_B):
     return loss_D_real, loss_D_fake
 
 
+def set_requires_grad(net, requires_grad=False):
+    """Sets requires_grad for all the networks to avoid unnecessary computations"""
+    if net is not None:
+        for param in net.parameters():
+            param.requires_grad = requires_grad
+
+
 # train, val, test
 def train_loop(epoch, cur, models, loader, optimizers, loss_fns):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -190,50 +212,53 @@ def train_loop(epoch, cur, models, loader, optimizers, loss_fns):
     
     for batch_idx, data in enumerate(loader):
         original, augmentation, noise = data     # split data
+        # print("devices before:", original.device, augmentation.device, noise.device)
 
-        print("ORIGINAL:", original.shape)
-        print("AUGMENTATION:", augmentation.shape)
-        print("NOISE:", noise.shape)
+        # move tensors to cuda
+        original, augmentation, noise = original.to(device), augmentation.to(device), noise.to(device)
+        # print("devices after:", original.device, augmentation.device, noise.device)
+
+        # print("ORIGINAL:", original.shape)
+        # print("AUGMENTATION:", augmentation.shape)
+        # print("NOISE:", noise.shape)
         fake_augmentation = models["net_G"].forward(original, noise)                   # compute fake images: G(A)
 
         # update D
-        # model.set_requires_grad(models["net_D"], True)  # enable backprop for D
+        set_requires_grad(models["net_D"], True)  # enable backprop for D
         optimizers["optim_D"].zero_grad()     # set D's gradients to zero
         loss_D_real, loss_D_fake = calculate_losses_D(models["net_D"], loss_fns, original, augmentation, fake_augmentation)                # calculate gradients for D
         # combine loss and calculate gradients
         loss_D = (loss_D_fake + loss_D_real) * 0.5
-        loss_D.backward()
+        loss_D.backward(retain_graph=True)
         optimizers["optim_D"].step()          # update D's weights
 
         # update G
-        # model.set_requires_grad(models["net_D"], False)  # D requires no gradients when optimizing G
+        set_requires_grad(models["net_D"], False)  # D requires no gradients when optimizing G
         optimizers["optim_G"].zero_grad()        # set G's gradients to zero
-        loss_G_GAN, loss_G_L1 = calculate_losses_G(models["net_D"], loss_fns, original, augmentation, fake_augmentation)                   # calculate graidents for G
+        loss_G_GAN, loss_G_L1 = calculate_losses_G(models["net_D"], loss_fns, original, augmentation, fake_augmentation)                   # calculate gradients for G
         # combine loss and calculate gradients
         loss_G = loss_G_GAN + loss_G_L1
-        loss_G.backward()
+        loss_G.backward(retain_graph=True)
 
-        optimizers["optim_G"].step()             # udpate G's weights
+        optimizers["optim_G"].step()             # update G's weights
 
-        total_loss["loss_D_real"] += loss_D_real
-        total_loss["loss_D_fake"] += loss_D_fake
-        total_loss["loss_G_GAN"] += loss_G_GAN
-        total_loss["loss_G_L1"] += loss_G_L1
+        total_loss["loss_D_real"] += loss_D_real.item()
+        total_loss["loss_D_fake"] += loss_D_fake.item()
+        total_loss["loss_G_GAN"] += loss_G_GAN.item()
+        total_loss["loss_G_L1"] += loss_G_L1.item()
 
-        if (batch_idx % 20) == 0:
-            print("batch: {}, loss_D_real: {:.3f}, loss_D_fake: {:.3f}, loss_G_GAN: {:.3f}, loss_G_L1: {:.3f}".format(batch_idx, total_loss["loss_D_real"], total_loss["loss_D_fake"], total_loss["loss_G_GAN"], total_loss["loss_G_L1"]))
+        # if (batch_idx % 20) == 0:
+        #     print("batch: {}, loss_D_real: {:.3f}, loss_D_fake: {:.3f}, loss_G_GAN: {:.3f}, loss_G_L1: {:.3f}".format(batch_idx, total_loss["loss_D_real"], total_loss["loss_D_fake"], total_loss["loss_G_GAN"], total_loss["loss_G_L1"]))
 
     total_loss["loss_D_real"] /= len(loader)
     total_loss["loss_D_fake"] /= len(loader)
     total_loss["loss_G_GAN"] /= len(loader)
     total_loss["loss_G_L1"] /= len(loader)
 
-    print("Epoch: {}, train_loss_D_real: {:.3f}, train_loss_D_fake: {:.3f}, train_loss_G_GAN: {:.3f}, train_loss_G_L1: {:.3f}".format(epoch, total_loss["loss_D_real"], total_loss["loss_D_fake"], total_loss["loss_G_GAN"], total_loss["loss_G_L1"]))
+    print(f"Fold: {cur}, Epoch: {epoch}, train_loss_D_real: {total_loss['loss_D_real']:.3f}, train_loss_D_fake: {total_loss['loss_D_fake']:.3f}, train_loss_G_GAN: {total_loss['loss_G_GAN']:.3f}, train_loss_G_L1: {total_loss['loss_G_L1']:.3f}")
 
-    mlflow.log_metric("train_loss_D_real_fold{}".format(cur), total_loss["loss_D_real"])
-    mlflow.log_metric("train_loss_D_fake_fold{}".format(cur), total_loss["loss_D_fake"])
-    mlflow.log_metric("train_loss_G_GAN_fold{}".format(cur), total_loss["loss_G_GAN"])
-    mlflow.log_metric("train_loss_G_L1_fold{}".format(cur), total_loss["loss_G_L1"])
+    for key, loss in total_loss.items():
+        mlflow.log_metric(key=f"fold{cur}_train_{key}", value=loss, step=epoch)
 
     return total_loss
 
@@ -252,6 +277,11 @@ def validate(cur, epoch, models, loader, early_stopping, loss_fns = None, result
     with torch.no_grad():
         for batch_idx, data in enumerate(loader):
             original, augmentation, noise = data     # split data
+            # print("devices before:", original.device, augmentation.device, noise.device)
+
+            # move tensors to cuda
+            original, augmentation, noise = original.to(device), augmentation.to(device), noise.to(device)
+            # print("devices after:", original.device, augmentation.device, noise.device)
 
             fake_augmentation = models["net_G"].forward(original, noise)                   # compute fake images: G(A)
 
@@ -259,22 +289,20 @@ def validate(cur, epoch, models, loader, early_stopping, loss_fns = None, result
             loss_D_real, loss_D_fake = calculate_losses_D(models["net_D"], loss_fns, original, augmentation, fake_augmentation)
             loss_G_GAN, loss_G_L1 = calculate_losses_G(models["net_D"], loss_fns, original, augmentation, fake_augmentation)
 
-            total_loss["loss_D_real"] += loss_D_real
-            total_loss["loss_D_fake"] += loss_D_fake
-            total_loss["loss_G_GAN"] += loss_G_GAN
-            total_loss["loss_G_L1"] += loss_G_L1
+            total_loss["loss_D_real"] += loss_D_real.item()
+            total_loss["loss_D_fake"] += loss_D_fake.item()
+            total_loss["loss_G_GAN"] += loss_G_GAN.item()
+            total_loss["loss_G_L1"] += loss_G_L1.item()
 
     total_loss["loss_D_real"] /= len(loader)
     total_loss["loss_D_fake"] /= len(loader)
     total_loss["loss_G_GAN"] /= len(loader)
     total_loss["loss_G_L1"] /= len(loader)
 
-    print("Epoch: {}, val_loss_D_real: {:.3f}, val_loss_D_fake: {:.3f}, val_loss_G_GAN: {:.3f}, val_loss_G_L1: {:.3f}".format(epoch, total_loss["loss_D_real"], total_loss["loss_D_fake"], total_loss["loss_G_GAN"], total_loss["loss_G_L1"]))
+    print(f"Fold: {cur}, Epoch: {epoch}, val_loss_D_real: {total_loss['loss_D_real']:.3f}, val_loss_D_fake: {total_loss['loss_D_fake']:.3f}, val_loss_G_GAN: {total_loss['loss_G_GAN']:.3f}, val_loss_G_L1: {total_loss['loss_G_L1']:.3f}")
 
-    mlflow.log_metric("val_loss_D_real_fold{}".format(cur), total_loss["loss_D_real"])
-    mlflow.log_metric("val_loss_D_fake_fold{}".format(cur), total_loss["loss_D_fake"])
-    mlflow.log_metric("val_loss_G_GAN_fold{}".format(cur), total_loss["loss_G_GAN"])
-    mlflow.log_metric("val_loss_G_L1_fold{}".format(cur), total_loss["loss_G_L1"])
+    for key, loss in total_loss.items():
+        mlflow.log_metric(key=f"fold{cur}_val_{key}", value=loss, step=epoch)
 
     if early_stopping:
         assert results_dir
@@ -301,6 +329,11 @@ def summary(models, loader, loss_fns):
     with torch.no_grad():
         for batch_idx, data in enumerate(loader):
             original, augmentation, noise = data     # split data
+            # print("devices before:", original.device, augmentation.device, noise.device)
+
+            # move tensors to cuda
+            original, augmentation, noise = original.to(device), augmentation.to(device), noise.to(device)
+            # print("devices after:", original.device, augmentation.device, noise.device)   
 
             fake_augmentation = models["net_G"].forward(original, noise)                   # compute fake images: G(A)
 
@@ -308,10 +341,10 @@ def summary(models, loader, loss_fns):
             loss_D_real, loss_D_fake = calculate_losses_D(models["net_D"], loss_fns, original, augmentation, fake_augmentation)
             loss_G_GAN, loss_G_L1 = calculate_losses_G(models["net_D"], loss_fns, original, augmentation, fake_augmentation)
 
-            total_loss["loss_D_real"] += loss_D_real
-            total_loss["loss_D_fake"] += loss_D_fake
-            total_loss["loss_G_GAN"] += loss_G_GAN
-            total_loss["loss_G_L1"] += loss_G_L1
+            total_loss["loss_D_real"] += loss_D_real.item()
+            total_loss["loss_D_fake"] += loss_D_fake.item()
+            total_loss["loss_G_GAN"] += loss_G_GAN.item()
+            total_loss["loss_G_L1"] += loss_G_L1.item()
 
     return total_loss
 
@@ -339,6 +372,6 @@ def train_val_test(train_split, val_split, test_split, args, cur):
     early_stopping = init_early_stopping(args)
 
     #---> do train val test
-    val_cindex, results_dict, test_cindex = step(cur, args, loss_fns, models, optimizers, train_loader, val_loader, test_loader, early_stopping)
+    total_val_loss, total_test_loss = step(cur, args, loss_fns, models, optimizers, train_loader, val_loader, test_loader, early_stopping)
 
-    return None, None, None
+    return total_val_loss, total_test_loss

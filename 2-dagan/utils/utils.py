@@ -36,13 +36,14 @@ class EarlyStopping:
         self.early_stop = False
         self.val_loss_min = np.Inf
 
-    def __call__(self, epoch, val_loss, model, ckpt_name = 'checkpoint.pt'):
+    def __call__(self, epoch, val_loss, models, ckpt_name = 'checkpoint.pt'):
+        val_loss = sum(val_loss.values())
 
         score = -val_loss
 
         if self.best_score is None:
             self.best_score = score
-            self.save_checkpoint(val_loss, model, ckpt_name)
+            self.save_checkpoint(val_loss, models, ckpt_name)
         elif score < self.best_score:
             self.counter += 1
             print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
@@ -50,14 +51,14 @@ class EarlyStopping:
                 self.early_stop = True
         else:
             self.best_score = score
-            self.save_checkpoint(val_loss, model, ckpt_name)
+            self.save_checkpoint(val_loss, models, ckpt_name)
             self.counter = 0
 
-    def save_checkpoint(self, val_loss, model, ckpt_name):
+    def save_checkpoint(self, val_loss, models, ckpt_name):
         '''Saves model when validation loss decrease.'''
         if self.verbose:
             print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-        torch.save(model.state_dict(), ckpt_name)
+        torch.save({"G_state_dict": models["net_G"].state_dict(), "D_state_dict": models["net_D"].state_dict()}, ckpt_name)
         self.val_loss_min = val_loss
 
 
@@ -140,6 +141,9 @@ def get_custom_exp_code(args):
     # param_code += exp_code + "_"
     param_code += "gan"
 
+    #----> model type
+    param_code += "_{}".format(str(args.model_type).lower())
+
     #----> seed 
     param_code += "_s{}".format(args.seed)
 
@@ -175,7 +179,7 @@ def seed_torch(seed=7):
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-def print_network(results_dir, net):
+def print_network(results_dir, net, net_name):
     num_params = 0
     num_params_train = 0
 
@@ -188,7 +192,7 @@ def print_network(results_dir, net):
     print('Total number of parameters: %d' % num_params)
     print('Total number of trainable parameters: %d' % num_params_train)
 
-    fname = "model_" + results_dir.split("/")[-1] + ".txt"
+    fname = "model_" + net_name + "_" + results_dir.split("/")[-1] + ".txt"
     path = os.path.join(results_dir, fname)
     f = open(path, "w")
     f.write(str(net))

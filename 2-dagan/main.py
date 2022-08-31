@@ -22,12 +22,16 @@ def main(args):
             fold_id,
         )
         
-        fold_results  = train_val_test(train_dataset, val_dataset, test_dataset, args, fold_id)
-        print(fold_results)
-        results.append(fold_results)
+        total_val_loss, total_test_loss  = train_val_test(train_dataset, val_dataset, test_dataset, args, fold_id)
+        print(total_val_loss)
+        print(total_test_loss)
+        fold_results = results.append({
+            "val": total_val_loss,
+            "test": total_test_loss,
+        })
 
         #write results to pkl
-        filename = os.path.join(args.results_dir, 'split_results.pkl')
+        filename = os.path.join(args.results_dir, 'split_results_{}.pkl'.format(fold_id))
         save_pkl(filename, fold_results)
     
     # write summary of fold results to csv
@@ -51,13 +55,18 @@ if __name__ == "__main__":
     seed_torch(args.seed)
 
     settings = {
-                'max_epochs': args.max_epochs, 
+                'data_root_dir': args.data_root_dir, 
                 'results_dir': args.results_dir, 
+                'max_epochs': args.max_epochs, 
                 'lr': args.lr,
                 'seed': args.seed,
-                'use_drop_out': args.drop_out,
+                'drop_out': args.drop_out,
                 'weighted_sample': args.weighted_sample,
-                'opt': args.opt}
+                'opt': args.opt,
+                'batch_size': args.batch_size,
+                'model_type': args.model_type,
+                'early_stopping': args.early_stopping,
+                }
 
     # #----> Outputs
     create_results_dir(args)

@@ -33,6 +33,9 @@ class GeneratorMLP(nn.Module):
             Returns:
                 - x_aug: augmented version of x [B, 1024] 
         """
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # print("x device:",x.device)
+        # print("z device:",z.device)
         x_aug = torch.cat([x, z], dim=1).squeeze()
         x_aug = self.encoder(x_aug)
         x_aug = self.decoder(x_aug)
@@ -91,9 +94,10 @@ class GeneratorTransformer(nn.Module):
             Returns:
                 - x_aug: augmented version of x [B x 1024] 
         """
+        x, z = x.unsqueeze(2), z.unsqueeze(2)
         x_aug = torch.cat([x, z], dim=2)  # concat original and noise
         x_aug = torch.permute(x_aug, (1, 0, 2))  # seq len first 
-        x_aug = self.augment_channel(x_aug)  # increast channel from 2 to 8 
+        x_aug = self.augment_channel(x_aug)  # increast channel from 2 to emb_dim
         x_aug = self.pos_encoding(x_aug)  # position encoding 
         x_aug = self.transformer(x_aug)  # apply transformer 
         x_aug = self.reduce_channel(x_aug)  # reduce channel 
@@ -106,22 +110,22 @@ def count_parameters(model):
 
 if __name__ == "__main__":
 
-    test_mlp = True
+    test_mlp = False
     if test_mlp:
         net = GeneratorMLP().cuda()
         # print(net)
         print("Number of parameters:", count_parameters(net))
-        x = torch.randn(32, 1024, 1).cuda()
-        z = torch.randn(32, 1024,  1).cuda()
+        x = torch.randn(32, 1024).cuda()
+        z = torch.randn(32, 1024).cuda()
         out = net(x, z)
         print("Out shape:", out.shape)
 
     test_transformer = True
     if test_transformer:
-        net = GeneratorTransformer().cuda()
+        net = GeneratorTransformer(n_heads=4, emb_dim=64).cuda()
         # print("Net:", net)
         print("Number of parameters:", count_parameters(net))
-        x = torch.randn(32, 1024, 1).cuda()
-        z = torch.randn(32, 1024,  1).cuda()
+        x = torch.randn(32, 1024).cuda()
+        z = torch.randn(32, 1024).cuda()
         out = net(x, z)
         print("Out shape:", out.shape)

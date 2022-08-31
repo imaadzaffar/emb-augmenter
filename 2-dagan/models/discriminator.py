@@ -28,6 +28,9 @@ class DiscriminatorMLP(nn.Module):
             Returns:
                 - is_real: if it's real of x [B x 1024] 
         """
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # print("x device:",x.device)
+        # print("x_aug device:",x_aug.device)
         is_real = torch.cat([x, x_aug], dim=1).squeeze()
         is_real = self.net(is_real)
         return is_real
@@ -84,6 +87,7 @@ class DiscriminatorTransformer(nn.Module):
             Returns:
                 - is_real: if it's real of x [B x 1024] 
         """
+        x, x_aug = x.unsqueeze(2), x_aug.unsqueeze(2)
         is_real = torch.cat([x, x_aug], dim=2)  # concat original and noise: B x seq_len x 2
         is_real = torch.permute(is_real, (1, 0, 2))  # seq len first: seq_len x B x 2 
         is_real = self.augment_channel(is_real)  # increase channel: seq_len x B x 8 
@@ -106,17 +110,17 @@ if __name__ == "__main__":
         net = DiscriminatorMLP().cuda()
         # print(net)
         print("Number of parameters:", count_parameters(net))
-        x = torch.randn(32, 1024, 1).cuda()
-        z = torch.randn(32, 1024,  1).cuda()
+        x = torch.randn(32, 1024).cuda()
+        z = torch.randn(32, 1024).cuda()
         out = net(x, z)
         print("Out shape:", out.shape)
 
     test_transformer = True
     if test_transformer:
-        net = DiscriminatorTransformer().cuda()
+        net = DiscriminatorTransformer(n_heads=4, emb_dim=64).cuda()
         # print("Net:", net)
         print("Number of parameters:", count_parameters(net))
-        x = torch.randn(32, 1024, 1).cuda()
-        z = torch.randn(32, 1024,  1).cuda()
+        x = torch.randn(32, 1024).cuda()
+        z = torch.randn(32, 1024).cuda()
         out = net(x, z)
         print("Out shape:", out.shape)
