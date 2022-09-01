@@ -14,6 +14,7 @@ import math
 from itertools import islice
 import collections
 import mlflow
+from datetime import datetime
 
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -151,15 +152,15 @@ def get_custom_exp_code(args):
     param_code += '_lr%s' % format(args.lr, '.0e')
 
     #----> Regularization
-    if args.reg_type == 'L1':
-      param_code += '_L1'
-    elif args.reg_type == "L2":
-        param_code += "_L2"
+    param_code += '_%s' % args.reg_type
 
     # param_code += '_%s' % args.which_splits.split("_")[0]
 
     #----> Batch Size
     param_code += '_b%s' % str(args.batch_size)
+
+    #----> Time Stamp to make it unique
+    param_code += '_%s' % datetime.now().strftime("%Y%d%m_%H%M%S")
 
     #----> Updating
     args.param_code = param_code
@@ -200,6 +201,8 @@ def print_network(results_dir, net, net_name):
     f.write('Total number of parameters: %d \n' % num_params)
     f.write('Total number of trainable parameters: %d \n' % num_params_train)
     f.close()
+
+    mlflow.log_param("num_params", num_params_train)
 
 def get_optim(model, args):
     if args.opt == "adam":
