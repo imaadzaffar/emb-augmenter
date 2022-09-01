@@ -56,7 +56,13 @@ if __name__ == "__main__":
 
     settings = {
                 'data_root_dir': args.data_root_dir, 
+                'split_dir': args.split_dir,
+                'csv_path': args.csv_fpath,
                 'results_dir': args.results_dir, 
+                'model_type': args.model_type,
+                'n_heads': args.n_heads,
+                'emb_dim': args.emb_dim,
+                'reg_type': args.reg_type,
                 'max_epochs': args.max_epochs, 
                 'lr': args.lr,
                 'seed': args.seed,
@@ -64,21 +70,16 @@ if __name__ == "__main__":
                 'weighted_sample': args.weighted_sample,
                 'opt': args.opt,
                 'batch_size': args.batch_size,
-                'model_type': args.model_type,
                 'early_stopping': args.early_stopping,
                 }
 
-    # #----> Outputs
-    create_results_dir(args)
-
-    #---> split dir
+    #---> Make sure directories/files exist
+    assert os.path.isdir(args.data_root_dir)
     assert os.path.isdir(args.split_dir)
-    print('split_dir: ', args.split_dir)
-    settings.update({'split_dir': args.split_dir})
-
     assert os.path.isfile(args.csv_fpath)
-    print('csv_path: ', args.csv_fpath)
-    settings.update({'csv_path': args.csv_fpath})
+
+    #----> Outputs
+    create_results_dir(args)
 
     #----> create dataset factory (process omics and WSI to create graph)
     args.dataset_factory = PatchDatasetFactory(

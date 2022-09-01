@@ -74,15 +74,15 @@ def init_optims(args, models):
 
 def init_models(args):
     print('\nInit models...', end=' ')
-    if args.model_type == 'MLP':
+    if args.model_type == 'mlp':
         models = {
             "net_G": GeneratorMLP(n_tokens=1024, dropout=args.drop_out),
             "net_D": DiscriminatorMLP(n_tokens=1024, dropout=args.drop_out),
         }
-    elif args.model_type == 'Transformer':
+    elif args.model_type == 'transformer':
         models = {
-            "net_G": GeneratorTransformer(n_tokens=1024, dropout=args.drop_out),
-            "net_D": DiscriminatorTransformer(n_tokens=1024, dropout=args.drop_out),
+            "net_G": GeneratorTransformer(n_tokens=1024, dropout=args.drop_out, n_heads=args.n_heads, emb_dim=args.emb_dim),
+            "net_D": DiscriminatorTransformer(n_tokens=1024, dropout=args.drop_out, n_heads=args.n_heads, emb_dim=args.emb_dim),
         }
     else:
         raise ValueError("Invalid model type.")
