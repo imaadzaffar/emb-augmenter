@@ -80,7 +80,7 @@ if __name__ == "__main__":
         print_info = True
         )
     
-    # print_and_log_experiment(args, settings)
+    print_and_log_experiment(args, settings)
 
     results = main(args)
     end = timer()
