@@ -14,6 +14,7 @@ import mlflow
 import os
 from models.model_attention_mil import SingleTaskAttentionMILClassifier
 from sklearn import metrics
+from torchmetrics.functional import auc
 
 
 def step(cur, args, loss_fn, model, optimizer, train_loader, val_loader, test_loader, early_stopping):
