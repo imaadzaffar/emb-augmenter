@@ -6,6 +6,7 @@ from utils.utils import EarlyStopping, get_optim, get_split_loader, print_networ
 #----> pytorch imports
 import torch
 import torch.nn as nn 
+import torchmetrics
 
 #----> general imports
 import numpy as np
@@ -13,6 +14,7 @@ import mlflow
 import os
 from models.model_attention_mil import SingleTaskAttentionMILClassifier
 from sklearn import metrics
+from torchmetrics.functional import auc
 
 
 def step(cur, args, loss_fn, model, optimizer, train_loader, val_loader, test_loader, early_stopping):
@@ -134,7 +136,7 @@ def validate(cur, epoch, model, loader, early_stopping, loss_fn = None, results_
     total_num = 0
     total_correct = 0
 
-    y, y_pred = [], []
+    y, y_probs, y_preds = [], [], []
     
     with torch.no_grad():
         for patch_embs, label in loader:
@@ -145,32 +147,32 @@ def validate(cur, epoch, model, loader, early_stopping, loss_fn = None, results_
             loss = loss_fn(logits, label)
             total_loss += loss.item()
 
-            # labels
-            y.append(label.item())
-            y_pred.append(torch.argmax(Y_prob).item())
-
             total_num += 1
             if torch.argmax(Y_prob).item() == label.item():
                 # correct if index of y_pred is equal to label
                 total_correct += 1
 
+            # labels
+            y.append(label.item())
+            y_probs.append(torch.max(Y_prob).item())
+            y_preds.append(torch.argmax(Y_prob).item())
+
             # print(f"logits: {logits}, label: {label}")
 
     total_loss /= len(loader)
     acc = total_correct / total_num
-    kappa = metrics.cohen_kappa_score(y, y_pred, weights='quadratic')
-    fpr, tpr, thresholds = metrics.roc_curve(y, y_pred, pos_label=2)
-    auc = metrics.auc(fpr, tpr)
+    kappa = metrics.cohen_kappa_score(y, y_preds, weights='quadratic')
+    auc_score = auc(torch.tensor(y).to(device), torch.tensor(y_probs).to(device), reorder=True)
 
     print('Epoch: {}, val_loss: {:.4f}'.format(epoch, total_loss))
     # print('Epoch: {}, val_acc: {:.4f}'.format(epoch, acc))
     # print('Epoch: {}, val_kappa: {:.4f}'.format(epoch, kappa))
-    # print('Epoch: {}, val_auc: {:.4f}'.format(epoch, auc))
+    # print('Epoch: {}, val_auc: {:.4f}'.format(epoch, auc_score))
 
     mlflow.log_metric("val_loss_fold{}".format(cur), total_loss)
     mlflow.log_metric("val_acc_fold{}".format(cur), acc)
     mlflow.log_metric("val_kappa_fold{}".format(cur), kappa)
-    mlflow.log_metric("val_auc_fold{}".format(cur), auc)
+    mlflow.log_metric("val_auc_fold{}".format(cur), auc_score)
 
     if early_stopping:
         assert results_dir
@@ -189,7 +191,7 @@ def summary(model, loader, loss_fn):
     total_num = 0
     total_correct = 0
 
-    y, y_pred = [], []
+    y, y_probs, y_preds = [], [], []
     
     with torch.no_grad():
         for patch_embs, label in loader:
@@ -201,7 +203,8 @@ def summary(model, loader, loss_fn):
 
             # labels
             y.append(label.item())
-            y_pred.append(torch.argmax(Y_prob).item())
+            y_probs.append(torch.max(Y_prob).item())
+            y_preds.append(torch.argmax(Y_prob).item())
 
             total_num += 1
             if torch.argmax(Y_prob).item() == label.item():
@@ -212,11 +215,10 @@ def summary(model, loader, loss_fn):
 
     total_loss /= len(loader)
     acc = total_correct / total_num
-    kappa = metrics.cohen_kappa_score(y, y_pred, weights='quadratic')
-    fpr, tpr, thresholds = metrics.roc_curve(y, y_pred, pos_label=2)
-    auc = metrics.auc(fpr, tpr)
+    kappa = metrics.cohen_kappa_score(y, y_preds, weights='quadratic')
+    auc_score = auc(torch.tensor(y).to(device), torch.tensor(y_probs).to(device), reorder=True)
 
-    return total_loss, acc, kappa, auc
+    return total_loss, acc, kappa, auc_score
 
 
 def train_val_test(train_split, val_split, test_split, args, cur):
