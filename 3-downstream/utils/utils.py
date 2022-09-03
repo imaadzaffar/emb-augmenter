@@ -188,9 +188,9 @@ def calculate_error(Y_hat, Y):
 	error = 1. - Y_hat.float().eq(Y.float()).float().mean().item()
 	return error
 
-def create_results_dir(args, results_root_dir):
-    aug_results_dir = args.augmentation_type if args.augmentation_type else 'original'
-    args.results_dir = os.path.join(results_root_dir, aug_results_dir)
+def create_results_dir(args):
+    # aug_results_dir = args.augmentation if args.augmentation else 'original'
+    args.results_dir = os.path.join("./results", args.results_dir)
     if not os.path.isdir(args.results_dir):
         os.mkdir(args.results_dir)
         #---> add gitignore to results dir
