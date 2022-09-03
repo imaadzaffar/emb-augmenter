@@ -56,13 +56,17 @@ class WSIDatasetFactory:
     def return_splits(self, fold_id):
 
         all_splits = pd.read_csv(os.path.join(self.split_dir, 'splits_{}.csv'.format(fold_id)))
-        train_split = self._get_split_from_df(all_splits=all_splits, split_key='train', augmentation_type=self.augmentation_type)
+
+        # augmentation for training
+        train_split = self._get_split_from_df(all_splits=all_splits, split_key='train', augmentation=self.augmentation, dagan=self.dagan)
+
+        # no augmentation for validation, testing
         val_split = self._get_split_from_df(all_splits=all_splits, split_key='val')
         test_split = self._get_split_from_df(all_splits=all_splits, split_key='test')
 
         return train_split, val_split, test_split
 
-    def _get_split_from_df(self, all_splits: dict={}, split_key: str='train', scaler=None):
+    def _get_split_from_df(self, all_splits: dict={}, split_key: str='train', augmentation=None, dagan=False, scaler=None):
         split = all_splits[split_key]
         split = split.dropna().reset_index(drop=True)
         split = list(split.values)
@@ -76,8 +80,8 @@ class WSIDatasetFactory:
                 data_dir=self.data_dir,
                 labels=labels,
                 num_classes=self.num_classes,
-                augmentation=self.augmentation,
-                dagan=self.dagan
+                augmentation=augmentation,
+                dagan=dagan
             )
         else:
             split_dataset = None
