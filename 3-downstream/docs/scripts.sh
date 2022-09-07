@@ -9,4 +9,4 @@ CUDA_DEVICES=0 python main.py \
     --lr 0.001 \
     --batch_size=1 \
     --augmentation combined \
-    --dagan
+    # --dagan
