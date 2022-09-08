@@ -202,7 +202,7 @@ def print_network(results_dir, net, net_name):
     f.write('Total number of trainable parameters: %d \n' % num_params_train)
     f.close()
 
-    mlflow.log_param("num_params", num_params_train)
+    mlflow.log_param(f"num_params_{net_name}", num_params_train)
 
 def get_optim(model, args):
     if args.opt == "adam":
