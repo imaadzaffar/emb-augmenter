@@ -64,6 +64,7 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe
         return self.dropout(x)
 
+
 class GeneratorTransformer(nn.Module):
     def __init__(
         self, 
@@ -105,10 +106,58 @@ class GeneratorTransformer(nn.Module):
         return x_aug
 
 
+class GeneratorIndependent(nn.Module):
+    def __init__(
+        self, 
+        ):
+        super(GeneratorIndependent, self).__init__()
+
+        self.all_mlps = []
+        for _ in range(1024):
+            mlp = nn.Sequential(
+                nn.Linear(2, 4),
+                nn.ReLU(),
+                nn.Linear(4, 1)
+            )
+            # mlp = nn.Sequential(
+            #     nn.Linear(2, 1),
+            # )
+            self.all_mlps.append(mlp)
+        self.all_mlps = nn.ModuleList(self.all_mlps)
+
+    def forward(self, x, z):
+        """
+        Forward pass. 
+            Args:
+                - x: original feature [B x 1024 x 1] 
+                - z: random noise [B x 1024 x1]
+            Returns:
+                - x_aug: augmented version of x [B x 1024] 
+        """
+        x, z = x.unsqueeze(2), z.unsqueeze(2)
+        data = torch.cat([x, z], dim=2)  # concat original and noise
+        data = torch.permute(data, (1, 0, 2))  # seq len first 
+        augmentations = []
+        for i in range(1024):
+            o = self.all_mlps[i](data[i, :, :])
+            augmentations.append(o)
+        augmentations = torch.cat(augmentations, dim=1)
+        return augmentations
+
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 if __name__ == "__main__":
+
+    test_independent = True
+    if test_independent:
+        net = GeneratorIndependent().cuda()
+        print("Number of parameters:", count_parameters(net))
+        x = torch.randn(32, 1024).cuda()
+        z = torch.randn(32, 1024).cuda()
+        out = net(x, z)
+        print("Out shape:", out.shape)
 
     test_mlp = False
     if test_mlp:
@@ -120,7 +169,7 @@ if __name__ == "__main__":
         out = net(x, z)
         print("Out shape:", out.shape)
 
-    test_transformer = True
+    test_transformer = False
     if test_transformer:
         net = GeneratorTransformer(n_heads=4, emb_dim=64).cuda()
         # print("Net:", net)

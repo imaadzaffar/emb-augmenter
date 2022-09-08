@@ -57,6 +57,7 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe
         return self.dropout(x)
 
+
 class DiscriminatorTransformer(nn.Module):
     def __init__(
         self, 
@@ -100,10 +101,58 @@ class DiscriminatorTransformer(nn.Module):
         return is_real
 
 
+class DiscriminatorIndependent(nn.Module):
+    def __init__(
+        self, 
+        ):
+        super(DiscriminatorIndependent, self).__init__()
+
+        self.all_mlps = []
+        for _ in range(1024):
+            mlp = nn.Sequential(
+                nn.Linear(2, 4),
+                nn.ReLU(),
+                nn.Linear(4, 1)
+            )
+            # mlp = nn.Sequential(
+            #     nn.Linear(2, 1),
+            # )
+            self.all_mlps.append(mlp)
+        self.all_mlps = nn.ModuleList(self.all_mlps)
+
+    def forward(self, x, x_aug):
+        """
+        Forward pass. 
+            Args:
+                - x: original feature [B x 1024 x 1] 
+                - z: augmented feature [B x 1024 x1]
+            Returns:
+                - is_real: if it's real of x [B x 1024] 
+        """
+        x, x_aug = x.unsqueeze(2), x_aug.unsqueeze(2)
+        data = torch.cat([x, x_aug], dim=2)  # concat original and noise: B x 1024 x 2
+        data = torch.permute(data, (1, 0, 2))   # feature first 
+        all_outputs = []
+        for i in range(1024):
+            o = self.all_mlps[i](data[i, :, :])
+            all_outputs.append(o)
+        all_outputs = torch.cat(all_outputs, dim=1)
+        is_real = torch.mean(all_outputs, dim=1)
+        return is_real
+
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 if __name__ == "__main__":
+
+    test_independent = True
+    if test_independent:
+        net = DiscriminatorIndependent().cuda()
+        x = torch.randn(32, 1024).cuda()
+        z = torch.randn(32, 1024).cuda()
+        out = net(x, z)
+        print("Out shape:", out.shape)
 
     test_mlp = False
     if test_mlp:
@@ -115,7 +164,7 @@ if __name__ == "__main__":
         out = net(x, z)
         print("Out shape:", out.shape)
 
-    test_transformer = True
+    test_transformer = False
     if test_transformer:
         net = DiscriminatorTransformer(n_heads=4, emb_dim=64).cuda()
         # print("Net:", net)
