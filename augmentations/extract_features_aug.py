@@ -32,12 +32,14 @@ with h5py.File(h5_path, "r") as f:
     print(slide)
     image = slide.crop((x, y, x + PATCH_SIZE, y + PATCH_SIZE))
     image.load()
-    print(image)
-    # image.save("tmp.png")
+    # print(image)
 
+    image.save("images/img_original.png")
     image = np.array(image)
-    aug_image = aug_combined(image=image)
-    # Image.fromarray(aug_image).save("tmp_aug.png")
+
+    for i in range(20):
+        aug_image = aug_combined(image=image)
+        Image.fromarray(aug_image).save(f"images/img_aug{i}.png")
 
 
 # with os.scandir(patches_path) as it:
