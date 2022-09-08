@@ -108,7 +108,7 @@ def train_loop(epoch, cur, model, loader, optimizer, loss_fn):
 
     total_loss /= len(loader)
 
-    print('Epoch: {}, train_loss: {:.4f}'.format(epoch, total_loss))
+    print(f"Fold: {cur}, Epoch: {epoch}, train_loss: {total_loss:.4f}")
 
     mlflow.log_metric(key=f"fold{cur}_train_loss", value=total_loss, step=epoch)
 

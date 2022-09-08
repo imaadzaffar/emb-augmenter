@@ -42,7 +42,7 @@ CUDA_DEVICES=2 python main.py \
     --emb_dim=64
 
 
-CUDA_DEVICES=2 python main.py \
+CUDA_DEVICES=1 python main.py \
     --data_root_dir /media/disk2/proj_embedding_aug/extracted_mag40x_patch256_fp/resnet50_trunc_pt_patch_features/ \
     --csv_fpath datasets_csv/labels.csv \
     --split_dir splits/sicapv2/ \
@@ -54,5 +54,5 @@ CUDA_DEVICES=2 python main.py \
     --early_stopping \
     --reg_type=cosine \
     --model_type=transformer \
-    --n_heads=4 \
-    --emb_dim=64
+    --n_heads=2 \
+    --emb_dim=2

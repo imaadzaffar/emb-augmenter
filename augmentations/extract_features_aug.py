@@ -13,6 +13,7 @@ slide_dir = "/media/disk2/prostate/SICAPv2/wsis"
 data_root = "/media/disk2/proj_embedding_aug"
 extracted_dir = "extracted_mag40x_patch256_fp"
 patches_path = os.path.join(data_root, extracted_dir, "patches")
+save_dir = "/images"
 
 PATCH_SIZE = 256
 TARGET_SIZE = 224
@@ -34,12 +35,12 @@ with h5py.File(h5_path, "r") as f:
     image.load()
     # print(image)
 
-    image.save("images/img_original.png")
+    image.save(os.path.join(save_dir, f"images/img_original.png"))
     image = np.array(image)
 
     for i in range(20):
         aug_image = aug_combined(image=image)
-        Image.fromarray(aug_image).save(f"images/img_aug{i}.png")
+        Image.fromarray(aug_image).save(os.path.join(save_dir, f"images/img_aug{i}.png"))
 
 
 # with os.scandir(patches_path) as it:
