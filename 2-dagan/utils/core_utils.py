@@ -13,8 +13,13 @@ from torch.autograd import Variable
 import numpy as np
 import mlflow 
 import os
+<<<<<<< HEAD
 from models.generator import GeneratorMLP, GeneratorTransformer, GeneratorIndependent, GeneratorIndependentFast
 from models.discriminator import DiscriminatorMLP, DiscriminatorTransformer, DiscriminatorIndependent, DiscriminatorIndependentFast
+=======
+from models.generator import GeneratorMLP, GeneratorTransformer, GeneratorIndependent
+from models.discriminator import DiscriminatorMLP, DiscriminatorTransformer, DiscriminatorIndependent
+>>>>>>> Added Independent models for GAN
 from sksurv.metrics import concordance_index_censored
 
 def step(cur, args, loss_fns, models, optimizers, train_loader, val_loader, test_loader, early_stopping):
@@ -90,11 +95,14 @@ def init_models(args):
             "net_G": GeneratorIndependent(),
             "net_D": DiscriminatorIndependent(),
         }
+<<<<<<< HEAD
     elif args.model_type == 'independent_fast':
         models = {
             "net_G": GeneratorIndependentFast(),
             "net_D": DiscriminatorIndependentFast(),
         }
+=======
+>>>>>>> Added Independent models for GAN
     else:
         raise ValueError("Invalid model type.")
     
