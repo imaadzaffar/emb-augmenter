@@ -68,6 +68,6 @@ CUDA_DEVICES=0 python main.py \
     --batch_size=64 \
     --drop_out=0.2 \
     --early_stopping \
-    --model_type=transformer \
+    --model_type=independent \
     --n_heads=4 \
     --emb_dim=64
