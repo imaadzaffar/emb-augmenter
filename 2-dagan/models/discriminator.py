@@ -108,7 +108,7 @@ class DiscriminatorIndependent(nn.Module):
         super(DiscriminatorIndependent, self).__init__()
 
         self.all_mlps = []
-        for _ in range(1024):
+        for _ in range(1):
             mlp = nn.Sequential(
                 nn.Linear(2, 4),
                 nn.ReLU(),
@@ -134,7 +134,7 @@ class DiscriminatorIndependent(nn.Module):
         data = torch.permute(data, (1, 0, 2))   # feature first 
         all_outputs = []
         for i in range(1024):
-            o = self.all_mlps[i](data[i, :, :])
+            o = self.all_mlps[0](data[i, :, :])
             all_outputs.append(o)
         all_outputs = torch.cat(all_outputs, dim=1)
         is_real = torch.mean(all_outputs, dim=1)

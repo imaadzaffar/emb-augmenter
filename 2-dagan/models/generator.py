@@ -113,7 +113,7 @@ class GeneratorIndependent(nn.Module):
         super(GeneratorIndependent, self).__init__()
 
         self.all_mlps = []
-        for _ in range(1024):
+        for _ in range(1):
             mlp = nn.Sequential(
                 nn.Linear(2, 4),
                 nn.ReLU(),
@@ -139,7 +139,7 @@ class GeneratorIndependent(nn.Module):
         data = torch.permute(data, (1, 0, 2))  # seq len first 
         augmentations = []
         for i in range(1024):
-            o = self.all_mlps[i](data[i, :, :])
+            o = self.all_mlps[0](data[i, :, :])
             augmentations.append(o)
         augmentations = torch.cat(augmentations, dim=1)
         return augmentations
