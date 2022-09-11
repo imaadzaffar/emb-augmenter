@@ -16,7 +16,6 @@ def aug_combined(image):
     random_angle = [0, 90, 180, 270][random.randint(0, 3)]
 
     # TODO: zoom out with context of WSI
-    # TODO: rotation of 90 deg angles
     rotation_zoom = A.ShiftScaleRotate(
         shift_limit=0,
         scale_limit=(-0.1, +0.1),
@@ -43,7 +42,7 @@ def aug_rotation(image):
     random_angle = [90, 180, 270][random.randint(0, 2)]
 
     transform = A.Rotate(
-        (0, 360),
+        (random_angle,) * 2,
         border_mode=cv2.BORDER_CONSTANT,
         value=0,
         method="largest_box",
