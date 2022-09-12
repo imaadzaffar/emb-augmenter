@@ -13,8 +13,8 @@ from torch.autograd import Variable
 import numpy as np
 import mlflow 
 import os
-from models.generator import GeneratorMLP, GeneratorTransformer, GeneratorIndependent
-from models.discriminator import DiscriminatorMLP, DiscriminatorTransformer, DiscriminatorIndependent
+from models.generator import GeneratorMLP, GeneratorTransformer, GeneratorIndependent, GeneratorIndependentFast
+from models.discriminator import DiscriminatorMLP, DiscriminatorTransformer, DiscriminatorIndependent, DiscriminatorIndependentFast
 from sksurv.metrics import concordance_index_censored
 
 def step(cur, args, loss_fns, models, optimizers, train_loader, val_loader, test_loader, early_stopping):
@@ -89,6 +89,11 @@ def init_models(args):
         models = {
             "net_G": GeneratorIndependent(),
             "net_D": DiscriminatorIndependent(),
+        }
+    elif args.model_type == 'independent_fast':
+        models = {
+            "net_G": GeneratorIndependentFast(),
+            "net_D": DiscriminatorIndependentFast(),
         }
     else:
         raise ValueError("Invalid model type.")
