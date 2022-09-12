@@ -97,25 +97,23 @@ def get_custom_exp_code(args):
     param_code = ''
 
     #----> Augmentation
-    if args.augmentation:
-        param_code += args.augmentation
-    else:
-        param_code += "original"
+    param_code += f"_{args.augmentation}" if args.augmentation else "_original"
     
-    if args.dagan:
+    if args.dagan_run_code is not None:
         param_code += "_dagan"
 
+
     #----> Seed 
-    param_code += "_s{}".format(args.seed)
+    param_code += f"_s{args.seed}"
 
     #----> Learning Rate
-    param_code += '_lr%s' % format(args.lr, '.0e')
+    param_code += f"_lr{format(args.lr, '.0e')}"
 
     #----> Batch Size
-    param_code += '_b%s' % str(args.batch_size)
+    param_code += f"_b{args.batch_size}"
 
     #----> Time Stamp to make it unique
-    param_code += '_%s' % datetime.now().strftime("%Y%d%m_%H%M%S")
+    param_code += "_" + datetime.now().strftime('%Y%d%m_%H%M%S')
 
     #----> Updating
     args.param_code = param_code

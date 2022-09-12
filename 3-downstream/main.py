@@ -1,7 +1,7 @@
 #----> internal imports
 from datasets.dataset import WSIDatasetFactory
 from utils.process_args import process_args
-from utils.utils import create_results_dir, end_run, get_custom_exp_code, print_and_log_experiment, seed_torch
+from utils.utils import create_results_dir, get_custom_exp_code, print_and_log_experiment, seed_torch
 from utils.core_utils import train_val_test
 from utils.file_utils import save_pkl
 
@@ -55,7 +55,10 @@ if __name__ == "__main__":
                 'results_dir': args.results_dir, 
                 'max_epochs': args.max_epochs, 
                 'augmentation': args.augmentation, 
-                'dagan': args.dagan, 
+                'dagan_run_code': args.dagan_run_code,
+                'dagan_model': args.dagan_model,
+                'dagan_n_heads': args.dagan_n_heads,
+                'dagan_emb_dim': args.dagan_emb_dim,
                 'lr': args.lr,
                 'seed': args.seed,
                 'use_drop_out': args.drop_out,
@@ -70,13 +73,22 @@ if __name__ == "__main__":
     create_results_dir(args)
 
     #----> create dataset factory (process omics and WSI to create graph)
+    dagan_settings = None
+    if args.dagan_run_code is not None:
+        dagan_settings = {
+            "run_code": args.dagan_run_code,
+            "model": args.dagan_model,
+            "n_heads": args.dagan_n_heads,
+            "emb_dim": args.dagan_emb_dim,
+        }
+
     args.dataset_factory = WSIDatasetFactory(
         data_dir=args.data_root_dir,
         csv_path=args.csv_fpath,
         split_dir=args.split_dir,
-        seed = args.seed, 
-        augmentation = args.augmentation,
-        dagan = args.dagan,
+        seed=args.seed, 
+        augmentation=args.augmentation,
+        dagan_settings=dagan_settings,
         print_info = True
         )
     
