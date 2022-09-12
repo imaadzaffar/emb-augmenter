@@ -191,11 +191,7 @@ class DiscriminatorIndependent(nn.Module):
 
         self.all_mlps = []
         for _ in range(1024):
-            mlp = nn.Sequential(
-                nn.Linear(2, 4),
-                nn.ReLU(),
-                nn.Linear(4, 1)
-            )
+            mlp = nn.Sequential(nn.Linear(2, 4), nn.ReLU(), nn.Linear(4, 1))
             # mlp = nn.Sequential(
             #     nn.Linear(2, 1),
             # )
@@ -204,16 +200,16 @@ class DiscriminatorIndependent(nn.Module):
 
     def forward(self, x, x_aug):
         """
-        Forward pass. 
+        Forward pass.
             Args:
-                - x: original feature [B x 1024 x 1] 
+                - x: original feature [B x 1024 x 1]
                 - z: augmented feature [B x 1024 x1]
             Returns:
-                - is_real: if it's real of x [B x 1024] 
+                - is_real: if it's real of x [B x 1024]
         """
         x, x_aug = x.unsqueeze(2), x_aug.unsqueeze(2)
         data = torch.cat([x, x_aug], dim=2)  # concat original and noise: B x 1024 x 2
-        data = torch.permute(data, (1, 0, 2))   # feature first 
+        data = torch.permute(data, (1, 0, 2))  # feature first
         all_outputs = []
         for i in range(1024):
             o = self.all_mlps[i](data[i, :, :])

@@ -42,9 +42,6 @@ class GeneratorMLP(nn.Module):
             Returns:
                 - x_aug: augmented version of x [B, 1024]
         """
-        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # print("x device:",x.device)
-        # print("z device:",z.device)
         x_aug = torch.cat([x, z], dim=1).squeeze()
         x_aug = self.encoder(x_aug)
         x_aug = self.decoder(x_aug)
