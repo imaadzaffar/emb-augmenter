@@ -2,8 +2,23 @@
 
 # -------------------------------- ARGS ------------------------------------
 
+# dagan
+DAGAN_REG_TYPE=None
+DAGAN_EPOCHS=200
+DAGAN_BATCH_SIZE=64
+DAGAN_LEARNING_RATE=0.001
+DAGAN_DROP_OUT=0.2
 DAGAN_N_HEADS=4
 DAGAN_EMB_DIM=64
+
+# classifier
+CLASSIFIER_AUGMENTATION=combined
+CLASSIFIER_EPOCHS=100
+CLASSIFIER_BATCH_SIZE=64
+CLASSIFIER_LEARNING_RATE=0.001
+CLASSIFIER_RUNS=5
+CLASSIFIER_DROP_OUT=0.2
+
 
 while [ $# -gt 0 ] ; do
   case $1 in
@@ -34,20 +49,6 @@ DATA_ROOT_DIR="/media/disk2/proj_embedding_aug/extracted_mag40x_patch256_fp/resn
 CSV_FPATH="datasets_csv/labels.csv"
 SPLIT_DIR="splits/sicapv2/"
 RESULTS_DIR="sicapv2/"
-
-# dagan
-DAGAN_EPOCHS=200
-DAGAN_BATCH_SIZE=64
-DAGAN_LEARNING_RATE=0.001
-DAGAN_DROP_OUT=0.2
-
-# classifier
-CLASSIFIER_AUGMENTATION=combined
-CLASSIFIER_EPOCHS=100
-CLASSIFIER_BATCH_SIZE=64
-CLASSIFIER_LEARNING_RATE=0.001
-CLASSIFIER_RUNS=5
-CLASSIFIER_DROP_OUT=0.2
 
 # -------------------------------- COMMANDS ------------------------------------
 
