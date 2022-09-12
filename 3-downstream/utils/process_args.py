@@ -25,8 +25,10 @@ def process_args():
     parser.add_argument('--num_runs', type=int, default=1, help='number of times to repeat experiment')
     parser.add_argument('--augmentation', type=str, default=None, choices=[None, "combined", "rotation", "hue", "sat", "value", "zoom"], help='augmentation type')
 
-    # TODO: add dagan settings args
-    parser.add_argument('--dagan', action='store_true', default=False, help='Enable using DA-GAN as source for generated augmentations in training')
+    parser.add_argument('--dagan_run_code', default=None, help='Run code for DA-GAN model used to generate augmentations')
+    parser.add_argument('--dagan_model', default=None, help='model type for DA-GAN model used to generate augmentations')
+    parser.add_argument('--dagan_n_heads', default=None, help='n_heads for DA-GAN model used to generate augmentations')
+    parser.add_argument('--dagan_emb_dim', default=None, help='emb_dim for DA-GAN model used to generate augmentations')
 
     parser.add_argument('--mlflow_exp_name', type=str, default='ABMIL', help='ABMIL, whatever to be created')
 
