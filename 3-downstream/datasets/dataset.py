@@ -10,7 +10,9 @@ from torch.utils.data import Dataset
 import numpy as np
 
 # TODO: Import generator classes from 2-dagan
-from models.generator import GeneratorMLP, GeneratorTransformer
+# import sys
+# sys.path.append('../../2-dagan/models')
+from models.generator import GeneratorMLP, GeneratorTransformer, GeneratorIndependent
 
 class WSIDatasetFactory:
 
@@ -20,8 +22,7 @@ class WSIDatasetFactory:
         split_dir, 
         seed = 7, 
         augmentation = None,
-        dagan = False,
-        dagan_settings = {},
+        dagan_settings = None,
         print_info = True
         ):
         r"""
@@ -42,7 +43,6 @@ class WSIDatasetFactory:
         self.split_dir = split_dir
         self.seed = seed
         self.augmentation = augmentation
-        self.dagan = dagan
         self.dagan_settings = dagan_settings
         self.print_info = print_info
 
@@ -85,7 +85,6 @@ class WSIDatasetFactory:
                 labels=labels,
                 num_classes=self.num_classes,
                 augmentation=augmentation,
-                dagan=dagan
                 dagan_settings=dagan_settings
             )
         else:
@@ -101,8 +100,7 @@ class WSIDataset(Dataset):
         labels,
         num_classes=8,
         augmentation=None,
-        dagan=False,
-        dagan_settings={},
+        dagan_settings=None,
         ): 
 
         super(WSIDataset, self).__init__()
@@ -113,23 +111,37 @@ class WSIDataset(Dataset):
         self.num_classes = num_classes
         self.augmentation = augmentation
 
-        if dagan == True:
-            self._load_generator_model(dagan_settings)
+        if dagan_settings is not None:
+            self.generator = self._load_generator_model(dagan_settings)
             
+    def _get_dagan_state_path(self, dagan_run_code):
+        """Get path to file with saved state for specific DA-GAN generator"""
+
+        state_path = f"/home/guillaume/Documents/uda/project-augmented-embeddings/2-dagan/results/sicapv2/{dagan_run_code}/model_G_{dagan_run_code}.txt"
+
+        print(state_path)
+        return state_path
+
 
     def _load_generator_model(self, dagan_settings):
         """Initiate generator model and load saved state from 2-dagan experiment"""
 
-        dagan_state_dict = torch.load(os.path.join("../../2-dagan/", dagan_settings.state_path))
+        dagan_state_path = self._get_dagan_state_path(dagan_settings["run_code"])
+        dagan_state_dict = torch.load(dagan_state_path)
 
         if dagan_settings.model_type == 'mlp':
-            self.generator = GeneratorMLP(n_tokens=dagan_settings.n_tokens, dropout=dagan_settings.drop_out)
+            generator = GeneratorMLP(n_tokens=dagan_settings["n_tokens"], dropout=dagan_settings["drop_out"])
         elif dagan_settings.model_type == 'transformer':
-            self.generator = GeneratorTransformer(n_tokens=dagan_settings.n_tokens, dropout=dagan_settings.drop_out, n_heads=dagan_settings.n_heads, emb_dim=dagan_settings.emb_dim)
+            generator = GeneratorTransformer(n_tokens=dagan_settings["n_tokens"], dropout=dagan_settings["drop_out"], n_heads=dagan_settings["n_heads"], emb_dim=dagan_settings["emb_dim"])
+        elif dagan_settings.model_type == 'independent':
+            generator = GeneratorIndependent()
         else:
             raise ValueError("Invalid model type for generator")
 
-        self.generator.load(dagan_state_dict["G_state_dict"])
+        generator.load(dagan_state_dict["G_state_dict"])
+
+        print(generator)
+        return generator
 
 
     def __getitem__(self, idx):
@@ -160,7 +172,7 @@ class WSIDataset(Dataset):
         path = os.path.join(self.data_dir, '{}.pt'.format(slide_id))
         patch_embs = torch.load(path)
 
-        if self.dagan == True:
+        if self.dagan_settings is not None:
             num_augs = 4
             patch_embs = self._generate_aug_patch_embs(patch_embs, num_augs)
             aug_patch_embs = self._get_aug_patch_embs(patch_embs, [n for n in range(num_augs+1)])
