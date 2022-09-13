@@ -18,17 +18,19 @@ def process_args():
     parser.add_argument('--early_stopping', action='store_true', default=False, help='enable early stopping')
     parser.add_argument('--opt', type=str, default="adam", choices=["adam", "sgd",  "adamW", "radam"], help="Optimizer")
     parser.add_argument('--reg_type', type=str, default=None, choices=[None, "L1", "L2"], help="regularization type [None, L1, L2]")
-    parser.add_argument('--drop_out', type=int, default=0., help='dropout value for model')
+    parser.add_argument('--drop_out', type=float, default=0., help='dropout value for model')
     parser.add_argument('--weighted_sample', action='store_true', default=False, help='enable weighted sampling')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
 
     parser.add_argument('--num_runs', type=int, default=1, help='number of times to repeat experiment')
     parser.add_argument('--augmentation', type=str, default=None, choices=[None, "combined", "rotation", "hue", "sat", "value", "zoom"], help='augmentation type')
 
-    parser.add_argument('--dagan_run_code', default=None, help='Run code for DA-GAN model used to generate augmentations')
-    parser.add_argument('--dagan_model', default=None, help='model type for DA-GAN model used to generate augmentations')
-    parser.add_argument('--dagan_n_heads', default=None, help='n_heads for DA-GAN model used to generate augmentations')
-    parser.add_argument('--dagan_emb_dim', default=None, help='emb_dim for DA-GAN model used to generate augmentations')
+    parser.add_argument('--dagan_run_code', type=str, default=None, help='Run code for DA-GAN model used to generate augmentations')
+    parser.add_argument('--dagan_model', type=str, default=None, help='model type for DA-GAN model used to generate augmentations')
+    parser.add_argument('--dagan_n_heads', type=int, default=0, help='n_heads for DA-GAN model used to generate augmentations')
+    parser.add_argument('--dagan_emb_dim', type=int, default=0, help='emb_dim for DA-GAN model used to generate augmentations')
+    parser.add_argument('--dagan_n_tokens',type=int,  default=1024, help='n_tokens for DA-GAN model used to generate augmentations')
+    parser.add_argument('--dagan_drop_out',type=float,  default=0., help='drop_out for DA-GAN model used to generate augmentations')
 
     parser.add_argument('--mlflow_exp_name', type=str, default='ABMIL', help='ABMIL, whatever to be created')
 

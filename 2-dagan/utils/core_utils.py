@@ -107,10 +107,10 @@ def init_loaders(args, train_split, val_split, test_split):
         args, train_split, training=True, batch_size=args.batch_size
     )
     val_loader = get_split_loader(
-        args, val_split, testing=False, batch_size=args.batch_size
+        args, val_split, training=False, batch_size=args.batch_size
     )
     test_loader = get_split_loader(
-        args, test_split, testing=False, batch_size=args.batch_size
+        args, test_split, training=False, batch_size=args.batch_size
     )
 
     return train_loader, val_loader, test_loader

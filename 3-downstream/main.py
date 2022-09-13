@@ -74,9 +74,13 @@ if __name__ == "__main__":
         "dagan_model": args.dagan_model,
         "dagan_n_heads": args.dagan_n_heads,
         "dagan_emb_dim": args.dagan_emb_dim,
+        "dagan_n_tokens": args.dagan_n_tokens,
+        "dagan_drop_out": args.dagan_drop_out,
+        "max_epochs": args.max_epochs,
+        "batch_size": args.batch_size,
         "lr": args.lr,
         "seed": args.seed,
-        "use_drop_out": args.drop_out,
+        "drop_out": args.drop_out,
         "weighted_sample": args.weighted_sample,
         "opt": args.opt,
     }
@@ -95,6 +99,8 @@ if __name__ == "__main__":
             "model": args.dagan_model,
             "n_heads": args.dagan_n_heads,
             "emb_dim": args.dagan_emb_dim,
+            "n_tokens": args.dagan_n_tokens,
+            "drop_out": args.dagan_drop_out,
         }
 
     args.dataset_factory = WSIDatasetFactory(
@@ -111,5 +117,5 @@ if __name__ == "__main__":
 
     results = main(args)
     end = timer()
-    logging.info("Finished!")
+    # logging.info("Finished!")
     logging.info("Script Time: %f seconds" % (end - start))

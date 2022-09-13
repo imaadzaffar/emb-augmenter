@@ -114,6 +114,6 @@ if __name__ == "__main__":
 
     results = main(args)
     end = timer()
-    logging.info("Finished!")
+    # logging.info("Finished!")
     logging.info("Script Time: %f seconds" % (end - start))
     print(args.param_code)

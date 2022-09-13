@@ -12,7 +12,12 @@ import numpy as np
 # TODO: Import generator classes from 2-dagan
 # import sys
 # sys.path.append('../../2-dagan/models')
-from models.generator import GeneratorMLP, GeneratorTransformer, GeneratorIndependent
+from models.generator import (
+    GeneratorMLP,
+    GeneratorTransformer,
+    GeneratorIndependent,
+    GeneratorIndependentFast,
+)
 
 import logging
 
@@ -73,7 +78,6 @@ class WSIDatasetFactory:
             all_splits=all_splits,
             split_key="train",
             augmentation=self.augmentation,
-            dagan=self.dagan,
             dagan_settings=self.dagan_settings,
         )
 
@@ -130,41 +134,49 @@ class WSIDataset(Dataset):
         self.labels = labels
         self.num_classes = num_classes
         self.augmentation = augmentation
+        self.dagan_settings = dagan_settings
 
+        self.generator = None
         if dagan_settings is not None:
             self.generator = self._load_generator_model(dagan_settings)
 
     def _get_dagan_state_path(self, dagan_run_code):
         """Get path to file with saved state for specific DA-GAN generator"""
 
-        state_path = f"/home/guillaume/Documents/uda/project-augmented-embeddings/2-dagan/results/sicapv2/{dagan_run_code}/model_G_{dagan_run_code}.txt"
+        state_path = f"/home/guillaume/Documents/uda/project-augmented-embeddings/2-dagan/results/sicapv2/{dagan_run_code}/s_4_checkpoint.pt"
 
-        log.debug(state_path)
+        log.debug(f"DA-GAN state path: {state_path}")
         return state_path
 
     def _load_generator_model(self, dagan_settings):
         """Initiate generator model and load saved state from 2-dagan experiment"""
 
+        log.debug(dagan_settings)
+
         dagan_state_path = self._get_dagan_state_path(dagan_settings["run_code"])
         dagan_state_dict = torch.load(dagan_state_path)
 
-        if dagan_settings.model_type == "mlp":
+        # log.debug(dagan_state_dict)
+
+        if dagan_settings["model"] == "mlp":
             generator = GeneratorMLP(
                 n_tokens=dagan_settings["n_tokens"], dropout=dagan_settings["drop_out"]
             )
-        elif dagan_settings.model_type == "transformer":
+        elif dagan_settings["model"] == "transformer":
             generator = GeneratorTransformer(
                 n_tokens=dagan_settings["n_tokens"],
                 dropout=dagan_settings["drop_out"],
                 n_heads=dagan_settings["n_heads"],
                 emb_dim=dagan_settings["emb_dim"],
             )
-        elif dagan_settings.model_type == "independent":
+        elif dagan_settings["model"] == "independent":
             generator = GeneratorIndependent()
+        elif dagan_settings["model"] == "independent_fast":
+            generator = GeneratorIndependentFast()
         else:
             raise ValueError("Invalid model type for generator")
 
-        generator.load(dagan_state_dict["G_state_dict"])
+        generator.load_state_dict(dagan_state_dict["G_state_dict"])
 
         log.debug(generator)
         return generator
@@ -176,11 +188,23 @@ class WSIDataset(Dataset):
 
     def _generate_aug_patch_embs(self, patch_embs, num_augs):
         """generate patch embs from dagan generator"""
-        aug_embs = patch_embs
+        original_emb = patch_embs[:, 0, :]
+
+        aug_embs = [original_emb]
+
         for n in range(num_augs):
-            noise = torch.randn(self.n_features)
-            gen_aug_emb = self.generator.forward(patch_embs, noise)
-            aug_embs = torch.stack((aug_embs, gen_aug_emb), dim=1)
+            with torch.no_grad():
+                noise = torch.randn(
+                    original_emb.size(0), original_emb.size(1), requires_grad=False
+                )
+
+                # log.debug(f"embs: {original_emb.size()}")
+                # log.debug(f"noise: {noise.size()}")
+
+                aug_emb = self.generator.forward(original_emb, noise)
+                aug_embs.append(aug_emb)
+
+        aug_embs = torch.stack(aug_embs, dim=1)
         return aug_embs
 
     def _get_aug_patch_embs(self, patch_embs, aug_choices):
@@ -188,6 +212,7 @@ class WSIDataset(Dataset):
         aug_indices = np.random.choice([0] + aug_choices, size=patch_embs.shape[0])
         patch_indices = np.arange(patch_embs.shape[0])
         aug_patch_embs = patch_embs[patch_indices, aug_indices, :]
+
         return aug_patch_embs
 
     def _load_wsi_from_path(self, slide_id):
@@ -196,14 +221,6 @@ class WSIDataset(Dataset):
         """
         path = os.path.join(self.data_dir, "{}.pt".format(slide_id))
         patch_embs = torch.load(path)
-
-        if self.dagan_settings is not None:
-            num_augs = 4
-            patch_embs = self._generate_aug_patch_embs(patch_embs, num_augs)
-            aug_patch_embs = self._get_aug_patch_embs(
-                patch_embs, [n for n in range(num_augs + 1)]
-            )
-            return aug_patch_embs
 
         aug_choices_dict = {
             "combined": [6, 7, 8, 9],
@@ -217,9 +234,17 @@ class WSIDataset(Dataset):
         if self.augmentation is None:
             return patch_embs[:, 0, :]  # get the original patch embedding
         elif self.augmentation in aug_choices_dict:
-            aug_patch_embs = self._get_aug_patch_embs(
-                patch_embs, aug_choices_dict[self.augmentation]
-            )
+            if self.generator is not None:
+                num_augs = 4
+                patch_embs = self._generate_aug_patch_embs(patch_embs, num_augs)
+                aug_patch_embs = self._get_aug_patch_embs(
+                    patch_embs, [n for n in range(num_augs + 1)]
+                )
+            else:
+                aug_patch_embs = self._get_aug_patch_embs(
+                    patch_embs, aug_choices_dict[self.augmentation]
+                )
+            # log.debug(f"aug_embs: {aug_patch_embs.size()}")
             return aug_patch_embs
         else:
             raise ValueError("Augmentation not recognized.")

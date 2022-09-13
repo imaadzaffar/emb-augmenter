@@ -129,7 +129,7 @@ def init_model(args):
 
 
 def init_loss_function(args):
-    log.debug("\nInit loss function...", end=" ")
+    log.debug("Init loss function...")
     loss_fn = nn.CrossEntropyLoss()
     return loss_fn
 
@@ -211,7 +211,8 @@ def train_loop(epoch, cur, model, loader, optimizer, loss_fn):
         )
     )
 
-    mlflow.log_metric(key=f"fold{cur}_train_loss", value=total_metrics, step=epoch)
+    for key, value in total_metrics.items():
+        mlflow.log_metric(key=f"fold{cur}_train_{key}", value=value, step=epoch)
 
     return 0.0, total_metrics
 

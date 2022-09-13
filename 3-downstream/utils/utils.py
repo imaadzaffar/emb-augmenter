@@ -58,9 +58,7 @@ class EarlyStopping:
             self.save_checkpoint(val_loss, model, ckpt_name)
         elif score < self.best_score:
             self.counter += 1
-            log.debug(
-                f"EarlyStopping counter: {self.counter} out of {self.patience}"
-            )
+            log.debug(f"EarlyStopping counter: {self.counter} out of {self.patience}")
             if self.counter >= self.patience and epoch > self.stop_epoch:
                 self.early_stop = True
         else:
@@ -93,6 +91,13 @@ class SubsetSequentialSampler(Sampler):
 
     def __len__(self):
         return len(self.indices)
+
+
+def collate_MIL(batch):
+    img = torch.cat([item[0] for item in batch], dim=0)
+    label = torch.LongTensor([item[1] for item in batch])
+    # log.debug(f"img size: {img.size()}")
+    return [img, label]
 
 
 def nth(iterator, n, default=None):
@@ -205,6 +210,7 @@ def get_split_loader(args, split_dataset, training=False, batch_size=1):
             split_dataset,
             batch_size=batch_size,
             sampler=RandomSampler(split_dataset),
+            collate_fn=collate_MIL,
             drop_last=True,
             **kwargs,
         )
@@ -213,6 +219,7 @@ def get_split_loader(args, split_dataset, training=False, batch_size=1):
             split_dataset,
             batch_size=batch_size,
             sampler=SequentialSampler(split_dataset),
+            collate_fn=collate_MIL,
             drop_last=True,
             **kwargs,
         )

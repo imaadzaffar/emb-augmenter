@@ -1,20 +1,21 @@
 #!/usr/bin/env python
 
-# -------------------------------- ARGS ------------------------------------
+# ---------- ARGS ----------
 
 # dagan
 DAGAN_REG_TYPE=None
+DAGAN_N_HEADS=4
+DAGAN_EMB_DIM=64
 DAGAN_EPOCHS=200
 DAGAN_BATCH_SIZE=64
 DAGAN_LEARNING_RATE=0.001
 DAGAN_DROP_OUT=0.2
-DAGAN_N_HEADS=4
-DAGAN_EMB_DIM=64
+DAGAN_N_TOKENS=1024
 
 # classifier
 CLASSIFIER_AUGMENTATION=combined
 CLASSIFIER_EPOCHS=100
-CLASSIFIER_BATCH_SIZE=64
+CLASSIFIER_BATCH_SIZE=1
 CLASSIFIER_LEARNING_RATE=0.001
 CLASSIFIER_RUNS=5
 CLASSIFIER_DROP_OUT=0.2
@@ -24,11 +25,12 @@ while [ $# -gt 0 ] ; do
   case $1 in
     --cuda_device) CUDA_DEVICE="$2" ;;
     --dagan_model) DAGAN_MODEL="$2" ;;
+    --dagan_reg_type) DAGAN_REG_TYPE="$2" ;;
     --dagan_n_heads) DAGAN_N_HEADS="$2" ;;
     --dagan_emb_dim) DAGAN_EMB_DIM="$2" ;;
-    --dagan_reg_type) DAGAN_REG_TYPE="$2" ;;
-    --dagan_batch_size) DAGAN_BATCH_SIZE="$2" ;;
+    --dagan_n_tokens) DAGAN_N_TOKENS="$2" ;;
     --dagan_epochs) DAGAN_EPOCHS="$2" ;;
+    --dagan_batch_size) DAGAN_BATCH_SIZE="$2" ;;
     --dagan_learning_rate) DAGAN_LEARNING_RATE="$2" ;;
     --dagan_drop_out) DAGAN_DROP_OUT="$2" ;;
 
@@ -36,13 +38,7 @@ while [ $# -gt 0 ] ; do
   shift
 done
 
-echo "dagan settings"
-echo "--model: $DAGAN_MODEL"
-echo "--n_heads: $DAGAN_N_HEADS"
-echo "--emb_dim: $DAGAN_EMB_DIM"
-echo "--reg_type: $DAGAN_REG_TYPE"
-
-# -------------------------------- VARIABLES ------------------------------------
+# ---------- VARIABLES ---------- 
 
 # files/directories
 DATA_ROOT_DIR="/media/disk2/proj_embedding_aug/extracted_mag40x_patch256_fp/resnet50_trunc_pt_patch_features/"
@@ -50,7 +46,7 @@ CSV_FPATH="datasets_csv/labels.csv"
 SPLIT_DIR="splits/sicapv2/"
 RESULTS_DIR="sicapv2/"
 
-# -------------------------------- COMMANDS ------------------------------------
+# ---------- COMMANDS ----------
 
 # dagan
 cd 2-dagan
@@ -99,6 +95,8 @@ RES_2=$(
     --dagan_model $DAGAN_MODEL \
     --dagan_n_heads $DAGAN_N_HEADS \
     --dagan_emb_dim $DAGAN_EMB_DIM \
+    --dagan_n_tokens $DAGAN_N_TOKENS \
+    --dagan_drop_out $DAGAN_DROP_OUT \
 )
 
 echo "Finished training classifier"

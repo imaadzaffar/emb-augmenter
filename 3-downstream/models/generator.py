@@ -42,9 +42,6 @@ class GeneratorMLP(nn.Module):
             Returns:
                 - x_aug: augmented version of x [B, 1024]
         """
-        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # print("x device:",x.device)
-        # print("z device:",z.device)
         x_aug = torch.cat([x, z], dim=1).squeeze()
         x_aug = self.encoder(x_aug)
         x_aug = self.decoder(x_aug)
@@ -148,6 +145,41 @@ class GeneratorIndependent(nn.Module):
         augmentations = []
         for i in range(1024):
             o = self.all_mlps[i](data[i, :, :])
+            augmentations.append(o)
+        augmentations = torch.cat(augmentations, dim=1)
+        return augmentations
+
+
+class GeneratorIndependentFast(nn.Module):
+    def __init__(
+        self,
+    ):
+        super(GeneratorIndependentFast, self).__init__()
+
+        self.all_mlps = []
+        for _ in range(1):
+            mlp = nn.Sequential(nn.Linear(2, 4), nn.ReLU(), nn.Linear(4, 1))
+            # mlp = nn.Sequential(
+            #     nn.Linear(2, 1),
+            # )
+            self.all_mlps.append(mlp)
+        self.all_mlps = nn.ModuleList(self.all_mlps)
+
+    def forward(self, x, z):
+        """
+        Forward pass.
+            Args:
+                - x: original feature [B x 1024 x 1]
+                - z: random noise [B x 1024 x1]
+            Returns:
+                - x_aug: augmented version of x [B x 1024]
+        """
+        x, z = x.unsqueeze(2), z.unsqueeze(2)
+        data = torch.cat([x, z], dim=2)  # concat original and noise
+        data = torch.permute(data, (1, 0, 2))  # seq len first
+        augmentations = []
+        for i in range(1024):
+            o = self.all_mlps[0](data[i, :, :])
             augmentations.append(o)
         augmentations = torch.cat(augmentations, dim=1)
         return augmentations
