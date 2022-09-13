@@ -212,7 +212,6 @@ class WSIDataset(Dataset):
         aug_indices = np.random.choice([0] + aug_choices, size=patch_embs.shape[0])
         patch_indices = np.arange(patch_embs.shape[0])
         aug_patch_embs = patch_embs[patch_indices, aug_indices, :]
-
         return aug_patch_embs
 
     def _load_wsi_from_path(self, slide_id):
