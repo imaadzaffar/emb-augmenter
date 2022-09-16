@@ -14,8 +14,18 @@ from torch.autograd import Variable
 import numpy as np
 import mlflow
 import os
-from models.generator import GeneratorMLP, GeneratorTransformer, GeneratorIndependent, GeneratorIndependentFast
-from models.discriminator import DiscriminatorMLP, DiscriminatorTransformer, DiscriminatorIndependent, DiscriminatorIndependentFast
+from models.generator import (
+    GeneratorMLP,
+    GeneratorTransformer,
+    GeneratorIndependent,
+    GeneratorIndependentFast,
+)
+from models.discriminator import (
+    DiscriminatorMLP,
+    DiscriminatorTransformer,
+    DiscriminatorIndependent,
+    DiscriminatorIndependentFast,
+)
 from sksurv.metrics import concordance_index_censored
 
 import logging
@@ -24,7 +34,6 @@ log = logging.getLogger(__name__)
 
 
 def step(
-    cur,
     args,
     loss_fns,
     models,
@@ -35,18 +44,11 @@ def step(
     early_stopping,
 ):
 
-    for epoch in range(args.max_epochs):
-        train_loop(epoch, cur, models, train_loader, optimizers, loss_fns)
-        stop = validate(
-            cur, epoch, models, val_loader, early_stopping, loss_fns, args.results_dir
-        )
-        if stop:
-            break
+    train_loop(models, train_loader, optimizers, loss_fns)
+    stop = validate(models, val_loader, early_stopping, loss_fns, args.results_dir)
 
     if args.early_stopping:
-        models_state_dict = torch.load(
-            os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))
-        )
+        models_state_dict = torch.load(os.path.join(args.results_dir, "checkpoint.pt"))
         models["net_G"].load_state_dict(models_state_dict["G_state_dict"])
         models["net_D"].load_state_dict(models_state_dict["D_state_dict"])
     else:
@@ -55,39 +57,37 @@ def step(
                 "G_state_dict": models["net_G"].state_dict(),
                 "D_state_dict": models["net_D"].state_dict(),
             },
-            os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)),
+            os.path.join(args.results_dir, "checkpoint.pt"),
         )
 
-    final_val_loss = summary(models, val_loader, loss_fns)
-    log.debug(
-        "f{} e{}, {} | D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
-            cur,
-            epoch,
-            "final val",
-            final_val_loss["D_real"],
-            final_val_loss["D_fake"],
-            final_val_loss["G_GAN"],
-            # final_val_loss["G_criterion"],
-        )
-    )
+    # final_val_loss, final_val_e = summary(models, val_loader, loss_fns)
+    # log.debug(
+    #     "{} | e: {:.3f}, D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
+    #         "final val",
+    #         final_val_e,
+    #         final_val_loss["D_real"],
+    #         final_val_loss["D_fake"],
+    #         final_val_loss["G_GAN"],
+    #         # final_val_loss["G_criterion"],
+    #     )
+    # )
 
-    final_test_loss = summary(models, test_loader, loss_fns)
-    log.debug(
-        "f{} e{}, {} | D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
-            cur,
-            epoch,
-            "final test",
-            final_test_loss["D_real"],
-            final_test_loss["D_fake"],
-            final_test_loss["G_GAN"],
-            # final_test_loss["G_criterion"],
-        )
-    )
+    # final_test_loss, final_test_e = summary(models, test_loader, loss_fns)
+    # log.debug(
+    #     "{} | e: {:.3f}, D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
+    #         "final test",
+    #         final_test_e,
+    #         final_test_loss["D_real"],
+    #         final_test_loss["D_fake"],
+    #         final_test_loss["G_GAN"],
+    #         # final_test_loss["G_criterion"],
+    #     )
+    # )
 
-    # mlflow.log_metric("fold{}_final_val_G_GAN".format(cur), total_val_loss["G_GAN"])
-    # mlflow.log_metric("fold{}_final_test_G_GAN".format(cur), total_test_loss["G_GAN"])
+    # mlflow.log_metric("fold{}_final_val_G_GAN".format(), total_val_loss["G_GAN"])
+    # mlflow.log_metric("fold{}_final_test_G_GAN".format(), total_test_loss["G_GAN"])
 
-    return final_val_loss, final_test_loss
+    return 0.0, 0.0
 
 
 # helper functions
@@ -157,7 +157,7 @@ def init_models(args):
             "net_G": GeneratorIndependent(),
             "net_D": DiscriminatorIndependent(),
         }
-    elif args.model_type == 'independent_fast':
+    elif args.model_type == "independent_fast":
         models = {
             "net_G": GeneratorIndependentFast(),
             "net_D": DiscriminatorIndependentFast(),
@@ -190,11 +190,10 @@ def init_loss_functions(args):
     return loss_fns
 
 
-def get_splits(datasets, cur, args):
-    log.debug("Training fold {}".format(cur))
+def get_splits(datasets, args):
     log.debug("Init train/val/test splits...")
     train_split, val_split, test_split = datasets
-    # save_splits(datasets, ['train', 'val', 'test'], os.path.join(args.results_dir, 'splits_{}.csv'.format(cur)))
+    # save_splits(datasets, ['train', 'val', 'test'], os.path.join(args.results_dir, 'splits_{}.csv'.format()))
     log.debug("Done!")
     log.debug("Training on {} samples".format(len(train_split)))
     log.debug("Validating on {} samples".format(len(val_split)))
@@ -292,10 +291,13 @@ def set_requires_grad(net, requires_grad=False):
 
 
 # train, val, test
-def train_loop(epoch, cur, models, loader, optimizers, loss_fns):
+def train_loop(models, loader, optimizers, loss_fns):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     models["net_G"].train().to(device)
     models["net_D"].train().to(device)
+
+    # sanity check metric
+    avg_e = 0.0
 
     total_loss = {
         "D_real": 0.0,
@@ -305,7 +307,6 @@ def train_loop(epoch, cur, models, loader, optimizers, loss_fns):
     }
 
     for batch_idx, data in enumerate(loader):
-        log.debug(f"f{cur} e{epoch}, batch {batch_idx}")
         original, augmentation, noise = data  # split data
 
         # move tensors to cuda
@@ -348,53 +349,67 @@ def train_loop(epoch, cur, models, loader, optimizers, loss_fns):
 
         optimizers["optim_G"].step()  # update G's weights
 
-        total_loss["D_real"] += D_real.item()
-        total_loss["D_fake"] += D_fake.item()
-        total_loss["G_GAN"] += G_GAN.item()
+        total_loss["D_real"] = D_real.item()
+        total_loss["D_fake"] = D_fake.item()
+        total_loss["G_GAN"] = G_GAN.item()
         # total_loss["G_criterion"] += G_criterion.item()
 
-        if (batch_idx % 20) == 0:
-            log.debug(
-                "f{} e{}, batch {} | D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}, G_criterion: {:.3f}".format(
-                    cur,
-                    epoch,
-                    batch_idx,
-                    total_loss["D_real"],
-                    total_loss["D_fake"],
-                    total_loss["G_GAN"],
-                    total_loss["G_criterion"],
+        # l1 distance
+        with torch.no_grad():
+            e = torch.cdist(augmentation, fake_augmentation, p=1)
+            # log.debug(f"aug: {augmentation.size()}")
+            # log.debug(f"fake: {fake_augmentation.size()}")
+            # log.debug(f"e: {e.size()}")
+
+            e = e.mean()
+            avg_e += e
+
+            # log.debug(f"train | batch: {batch_idx} | e: {e:.3f}")
+
+            for key, loss in total_loss.items():
+                mlflow.log_metric(key=f"train_{key}", value=loss, step=batch_idx)
+
+            mlflow.log_metric(key=f"train_e", value=e, step=batch_idx)
+
+            if (batch_idx % len(loader) // 100) == 0:
+                log.debug(
+                    "train | batch: {} | e: {:.3f}, D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
+                        batch_idx,
+                        e,
+                        total_loss["D_real"],
+                        total_loss["D_fake"],
+                        total_loss["G_GAN"],
+                        # total_loss["G_criterion"],
+                    )
                 )
-            )
 
-    total_loss["D_real"] /= len(loader)
-    total_loss["D_fake"] /= len(loader)
-    total_loss["G_GAN"] /= len(loader)
-    total_loss["G_criterion"] /= len(loader)
+    # total_loss["D_real"] /= len(loader)
+    # total_loss["D_fake"] /= len(loader)
+    # total_loss["G_GAN"] /= len(loader)
+    # total_loss["G_criterion"] /= len(loader)
 
-    log.debug(
-        "f{} e{}, {} | D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}, G_criterion: {:.3f}".format(
-            cur,
-            epoch,
-            "train",
-            total_loss["D_real"],
-            total_loss["D_fake"],
-            total_loss["G_GAN"],
-            total_loss["G_criterion"],
-        )
-    )
+    # avg_e /= len(loader)
 
-    for key, loss in total_loss.items():
-        mlflow.log_metric(key=f"fold{cur}_train_{key}", value=loss, step=epoch)
+    # log.debug(
+    #     "{} | D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}, G_criterion: {:.3f}".format(
+    #         "train",
+    #         total_loss["D_real"],
+    #         total_loss["D_fake"],
+    #         total_loss["G_GAN"],
+    #         total_loss["G_criterion"],
+    #     )
+    # )
 
     return total_loss
 
 
-def validate(
-    cur, epoch, models, loader, early_stopping, loss_fns=None, results_dir=None
-):
+def validate(models, loader, early_stopping, loss_fns=None, results_dir=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     models["net_G"].eval().to(device)
     models["net_D"].eval().to(device)
+
+    # # sanity check metric
+    # avg_e = 0.0
 
     total_loss = {
         "D_real": 0.0,
@@ -405,6 +420,7 @@ def validate(
 
     with torch.no_grad():
         for batch_idx, data in enumerate(loader):
+            # log.info(f"Batch: {batch_idx}")
             original, augmentation, noise = data  # split data
 
             # move tensors to cuda
@@ -426,45 +442,62 @@ def validate(
                 models["net_D"], loss_fns, original, augmentation, fake_augmentation
             )
 
-            total_loss["D_real"] += D_real.item()
-            total_loss["D_fake"] += D_fake.item()
-            total_loss["G_GAN"] += G_GAN.item()
-            # total_loss["G_criterion"] += G_criterion.item()
+            total_loss["D_real"] = D_real.item()
+            total_loss["D_fake"] = D_fake.item()
+            total_loss["G_GAN"] = G_GAN.item()
+            # loss["G_criterion"] = G_criterion.item()
 
-    total_loss["D_real"] /= len(loader)
-    total_loss["D_fake"] /= len(loader)
-    total_loss["G_GAN"] /= len(loader)
-    total_loss["G_criterion"] /= len(loader)
+            # l1 distance
+            e = torch.cdist(augmentation, fake_augmentation, p=1)
+            # log.debug(f"aug: {augmentation.size()}")
+            # log.debug(f"fake: {fake_augmentation.size()}")
+            # log.debug(f"e: {e.size()}")
 
-    log.debug(
-        "f{} e{}, {} | D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
-            cur,
-            epoch,
-            "val",
-            total_loss["D_real"],
-            total_loss["D_fake"],
-            total_loss["G_GAN"],
-            total_loss["G_criterion"],
-        )
-    )
+            e = e.mean()
+            # avg_e += e
 
-    for key, loss in total_loss.items():
-        mlflow.log_metric(key=f"fold{cur}_val_{key}", value=loss, step=epoch)
+            for key, loss in total_loss.items():
+                mlflow.log_metric(key=f"val_{key}", value=loss, step=batch_idx)
 
-    if early_stopping:
-        assert results_dir
-        early_stopping(
-            epoch,
-            total_loss,
-            models,
-            ckpt_name=os.path.join(results_dir, "s_{}_checkpoint.pt".format(cur)),
-        )
+            # log.debug(f"val | batch: {batch_idx} | e: {e}")
+            mlflow.log_metric(key=f"val_e", value=e, step=batch_idx)
 
-        if early_stopping.early_stop:
-            log.debug("Early stopping")
-            return True
+            if (batch_idx % len(loader) // 100) == 0:
+                log.debug(
+                    "val | batch: {} | e: {:.3f}, D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
+                        batch_idx,
+                        e,
+                        total_loss["D_real"],
+                        total_loss["D_fake"],
+                        total_loss["G_GAN"],
+                        # total_loss["G_criterion"],
+                    )
+                )
 
-    return False
+    # total_loss["D_real"] /= len(loader)
+    # total_loss["D_fake"] /= len(loader)
+    # total_loss["G_GAN"] /= len(loader)
+    # total_loss["G_criterion"] /= len(loader)
+    # avg_e /= len(loader)
+
+    # for key, loss in total_loss.items():
+    #     mlflow.log_metric(key=f"val_{key}", value=loss, step=epoch)
+    # mlflow.log_metric(key=f"val_e", value=avg_e, step=epoch)
+
+    # if early_stopping:
+    #     assert results_dir
+    #     early_stopping(
+    #         epoch,
+    #         total_loss,
+    #         models,
+    #         ckpt_name=os.path.join(results_dir, "checkpoint.pt"),
+    #     )
+
+    #     if early_stopping.early_stop:
+    #         log.debug("Early stopping")
+    #         return True
+
+    # return False
 
 
 def summary(models, loader, loss_fns):
@@ -510,7 +543,7 @@ def summary(models, loader, loss_fns):
     return total_loss
 
 
-def train_val_test(train_split, val_split, test_split, args, cur):
+def train_val_test(train_split, val_split, test_split, args):
     """
     Performs train val test for the fold over number of epochs
     """
@@ -537,7 +570,6 @@ def train_val_test(train_split, val_split, test_split, args, cur):
 
     # ---> do train val test
     total_val_loss, total_test_loss = step(
-        cur,
         args,
         loss_fns,
         models,

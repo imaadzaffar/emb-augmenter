@@ -30,28 +30,23 @@ logging.basicConfig(
 def main(args):
     results = []
 
-    for fold_id in range(5):  # 5-fold cross validation
-        train_dataset, val_dataset, test_dataset = args.dataset_factory.return_splits(
-            fold_id,
-        )
+    train_dataset, val_dataset, test_dataset = args.dataset_factory.return_splits()
 
-        total_val_loss, total_test_loss = train_val_test(
-            train_dataset, val_dataset, test_dataset, args, fold_id
-        )
-        logging.debug(f"Fold {fold_id}, final val loss: {total_val_loss}")
-        logging.debug(f"Fold {fold_id}, final test loss: {total_test_loss}")
-        fold_results = results.append(
-            {
-                "val": total_val_loss,
-                "test": total_test_loss,
-            }
-        )
+    total_val_loss, total_test_loss = train_val_test(
+        train_dataset, val_dataset, test_dataset, args
+    )
+    # logging.debug(f"Fold {fold_id}, final val loss: {total_val_loss}")
+    # logging.debug(f"Fold {fold_id}, final test loss: {total_test_loss}")
+    results.append(
+        {
+            "val": total_val_loss,
+            "test": total_test_loss,
+        }
+    )
 
-        # write results to pkl
-        filename = os.path.join(
-            args.results_dir, "split_results_{}.pkl".format(fold_id)
-        )
-        save_pkl(filename, fold_results)
+    # write results to pkl
+    filename = os.path.join(args.results_dir, "results.pkl")
+    save_pkl(filename, results)
 
     # write summary of fold results to csv
     df = pd.DataFrame.from_records(results)
@@ -75,38 +70,28 @@ if __name__ == "__main__":
     seed_torch(args.seed)
 
     settings = {
-        "data_root_dir": args.data_root_dir,
-        "split_dir": args.split_dir,
-        "csv_path": args.csv_fpath,
-        "results_dir": args.results_dir,
         "model_type": args.model_type,
         "n_heads": args.n_heads,
         "emb_dim": args.emb_dim,
         "reg_type": args.reg_type,
-        "max_epochs": args.max_epochs,
+        "dataset_size": args.dataset_size,
+        "batch_size": args.batch_size,
         "lr": args.lr,
         "seed": args.seed,
         "drop_out": args.drop_out,
         "weighted_sample": args.weighted_sample,
         "opt": args.opt,
-        "batch_size": args.batch_size,
         "early_stopping": args.early_stopping,
     }
-
-    # ---> Make sure directories/files exist
-    assert os.path.isdir(args.data_root_dir)
-    assert os.path.isdir(args.split_dir)
-    assert os.path.isfile(args.csv_fpath)
 
     # ----> Outputs
     create_results_dir(args)
 
     # ----> create dataset factory (process omics and WSI to create graph)
     args.dataset_factory = PatchDatasetFactory(
-        data_dir=args.data_root_dir,
-        csv_path=args.csv_fpath,
-        split_dir=args.split_dir,
         seed=args.seed,
+        dataset_size=args.dataset_size,
+        n_features=args.n_features,
         print_info=True,
     )
 
