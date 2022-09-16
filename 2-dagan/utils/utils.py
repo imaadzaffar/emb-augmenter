@@ -232,8 +232,9 @@ def print_network(results_dir, net, net_name):
         if param.requires_grad:
             num_params_train += n
 
-    log.debug("Total number of parameters: %d" % num_params)
-    log.debug("Total number of trainable parameters: %d" % num_params_train)
+    log.debug(f"net_{net_name} | Total number of params: {num_params}")
+    log.debug(f"net_{net_name} | Total number of trainable params: {num_params_train}")
+    log.debug(f"net_{net_name} |\n" + str(net))
 
     fname = "model_" + net_name + "_" + results_dir.split("/")[-1] + ".txt"
     path = os.path.join(results_dir, fname)

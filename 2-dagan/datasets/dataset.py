@@ -69,8 +69,8 @@ class PatchSimDataset(Dataset):
 
     def __getitem__(self, idx):
         original = torch.randn(self.n_features)
-        augmentation = original + torch.randn(self.n_features) / 2
         noise = torch.randn(self.n_features)
+        augmentation = original + noise / 2
 
         return original, augmentation, noise
 

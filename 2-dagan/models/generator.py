@@ -156,14 +156,13 @@ class GeneratorIndependentFast(nn.Module):
     ):
         super(GeneratorIndependentFast, self).__init__()
 
-        self.all_mlps = []
-        for _ in range(1):
-            mlp = nn.Sequential(nn.Linear(2, 4), nn.ReLU(), nn.Linear(4, 1))
-            # mlp = nn.Sequential(
-            #     nn.Linear(2, 1),
-            # )
-            self.all_mlps.append(mlp)
-        self.all_mlps = nn.ModuleList(self.all_mlps)
+        self.mlp = nn.Sequential(
+            nn.Linear(2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 8),
+            nn.ReLU(),
+            nn.Linear(8, 1)
+        )
 
     def forward(self, x, z):
         """
@@ -179,7 +178,7 @@ class GeneratorIndependentFast(nn.Module):
         data = torch.permute(data, (1, 0, 2))  # seq len first
         augmentations = []
         for i in range(1024):
-            o = self.all_mlps[0](data[i, :, :])
+            o = self.mlp(data[i, :, :])
             augmentations.append(o)
         augmentations = torch.cat(augmentations, dim=1)
         return augmentations

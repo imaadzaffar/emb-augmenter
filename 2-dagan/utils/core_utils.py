@@ -60,33 +60,6 @@ def step(
             os.path.join(args.results_dir, "checkpoint.pt"),
         )
 
-    # final_val_loss, final_val_e = summary(models, val_loader, loss_fns)
-    # log.debug(
-    #     "{} | e: {:.3f}, D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
-    #         "final val",
-    #         final_val_e,
-    #         final_val_loss["D_real"],
-    #         final_val_loss["D_fake"],
-    #         final_val_loss["G_GAN"],
-    #         # final_val_loss["G_criterion"],
-    #     )
-    # )
-
-    # final_test_loss, final_test_e = summary(models, test_loader, loss_fns)
-    # log.debug(
-    #     "{} | e: {:.3f}, D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
-    #         "final test",
-    #         final_test_e,
-    #         final_test_loss["D_real"],
-    #         final_test_loss["D_fake"],
-    #         final_test_loss["G_GAN"],
-    #         # final_test_loss["G_criterion"],
-    #     )
-    # )
-
-    # mlflow.log_metric("fold{}_final_val_G_GAN".format(), total_val_loss["G_GAN"])
-    # mlflow.log_metric("fold{}_final_test_G_GAN".format(), total_test_loss["G_GAN"])
-
     return 0.0, 0.0
 
 
@@ -252,7 +225,7 @@ class GANLoss(nn.Module):
         return loss
 
 
-def calculate_losses_G(net_D, loss_fns, real_A, real_B, fake_B, lambda_criterion=100):
+def calculate_losses_G(net_D, loss_fns, real_A, real_B, fake_B):
     """Calculate GAN and L1 loss for the generator"""
     # First, G(A) should fake the discriminator
     # we use conditional GANs; we need to feed both input and output to the discriminator
@@ -260,13 +233,12 @@ def calculate_losses_G(net_D, loss_fns, real_A, real_B, fake_B, lambda_criterion
     G_GAN = loss_fns["GAN"](pred_fake, True)
 
     # Second, G(A) = B
-    G_criterion = 0.0
     # if isinstance(loss_fns["loss_criterion"], torch.nn.CosineEmbeddingLoss):
     #     G_criterion = loss_fns["loss_criterion"](fake_B, real_B, Variable(torch.Tensor(fake_B.size(0)).cuda().fill_(1.0))) * lambda_criterion
     # else:
     #     G_criterion = loss_fns["loss_criterion"](fake_B, real_B) * lambda_criterion
 
-    return G_GAN, G_criterion
+    return G_GAN, None
 
 
 def calculate_losses_D(net_D, loss_fns, real_A, real_B, fake_B):
@@ -283,6 +255,29 @@ def calculate_losses_D(net_D, loss_fns, real_A, real_B, fake_B):
     return D_real, D_fake
 
 
+def calculate_e(augmentation, fake_augmentation):
+    """Calculate e metric for the generator"""
+
+    with torch.no_grad():
+        # element-wise distance between real and fake augmentation
+        dist = augmentation - fake_augmentation  # size: (B x 1024)
+
+        # l1 norm for each sample, calculated across each row
+        e_tensor = torch.linalg.norm(dist, ord=1, dim=1)  # size: (B x 1024)
+
+        # mean of l1 of each sample
+        e = torch.mean(e_tensor)  # size (B)
+
+        # log.debug(f"size, augmentation: {augmentation.size()}")
+        # log.debug(f"size, augmentation: {fake_augmentation.size()}")
+        # log.debug(f"size, distance: {dist.size()}")
+        # log.debug(f"size, e_tensor: {e_tensor.size()}")
+        # log.debug(f"dist: {dist}")
+        # log.debug(f"e_tensor: {e_tensor}")
+
+        return e
+
+
 def set_requires_grad(net, requires_grad=False):
     """Sets requires_grad for all the networks to avoid unnecessary computations"""
     if net is not None:
@@ -295,9 +290,6 @@ def train_loop(models, loader, optimizers, loss_fns):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     models["net_G"].train().to(device)
     models["net_D"].train().to(device)
-
-    # sanity check metric
-    avg_e = 0.0
 
     total_loss = {
         "D_real": 0.0,
@@ -318,7 +310,7 @@ def train_loop(models, loader, optimizers, loss_fns):
 
         fake_augmentation = models["net_G"].forward(
             original, noise
-        )  # compute fake images: G(A)
+        )  # compute fake images: G(x, z)
 
         # update D
         set_requires_grad(models["net_D"], True)  # enable backprop for D
@@ -341,10 +333,8 @@ def train_loop(models, loader, optimizers, loss_fns):
         )  # calculate gradients for G
         # combine loss and calculate gradients
 
-        # get rid of criterion loss
-        G_criterion = 0.0
-
-        G = G_GAN + G_criterion
+        G = G_GAN
+        # G = G_GAN + G_criterion
         G.backward(retain_graph=True)
 
         optimizers["optim_G"].step()  # update G's weights
@@ -352,53 +342,26 @@ def train_loop(models, loader, optimizers, loss_fns):
         total_loss["D_real"] = D_real.item()
         total_loss["D_fake"] = D_fake.item()
         total_loss["G_GAN"] = G_GAN.item()
-        # total_loss["G_criterion"] += G_criterion.item()
+        # total_loss["G_criterion"] = G_criterion.item()
 
-        # l1 distance
-        with torch.no_grad():
-            e = torch.cdist(augmentation, fake_augmentation, p=1)
-            # log.debug(f"aug: {augmentation.size()}")
-            # log.debug(f"fake: {fake_augmentation.size()}")
-            # log.debug(f"e: {e.size()}")
+        for key, loss in total_loss.items():
+            mlflow.log_metric(key=f"train_{key}", value=loss, step=batch_idx)
+            
+        e = calculate_e(augmentation, fake_augmentation)
+        e = e.item()
+        mlflow.log_metric(key=f"train_e", value=e, step=batch_idx)
 
-            e = e.mean()
-            avg_e += e
-
-            # log.debug(f"train | batch: {batch_idx} | e: {e:.3f}")
-
-            for key, loss in total_loss.items():
-                mlflow.log_metric(key=f"train_{key}", value=loss, step=batch_idx)
-
-            mlflow.log_metric(key=f"train_e", value=e, step=batch_idx)
-
-            if (batch_idx % len(loader) // 100) == 0:
-                log.debug(
-                    "train | batch: {} | e: {:.3f}, D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
-                        batch_idx,
-                        e,
-                        total_loss["D_real"],
-                        total_loss["D_fake"],
-                        total_loss["G_GAN"],
-                        # total_loss["G_criterion"],
-                    )
+        if batch_idx % 10 == 0:
+            log.debug(
+                "train | batch: {} | e: {:.3f}, D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
+                    batch_idx,
+                    e,
+                    total_loss["D_real"],
+                    total_loss["D_fake"],
+                    total_loss["G_GAN"],
+                    # total_loss["G_criterion"],
                 )
-
-    # total_loss["D_real"] /= len(loader)
-    # total_loss["D_fake"] /= len(loader)
-    # total_loss["G_GAN"] /= len(loader)
-    # total_loss["G_criterion"] /= len(loader)
-
-    # avg_e /= len(loader)
-
-    # log.debug(
-    #     "{} | D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}, G_criterion: {:.3f}".format(
-    #         "train",
-    #         total_loss["D_real"],
-    #         total_loss["D_fake"],
-    #         total_loss["G_GAN"],
-    #         total_loss["G_criterion"],
-    #     )
-    # )
+            )
 
     return total_loss
 
@@ -407,9 +370,6 @@ def validate(models, loader, early_stopping, loss_fns=None, results_dir=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     models["net_G"].eval().to(device)
     models["net_D"].eval().to(device)
-
-    # # sanity check metric
-    # avg_e = 0.0
 
     total_loss = {
         "D_real": 0.0,
@@ -445,59 +405,19 @@ def validate(models, loader, early_stopping, loss_fns=None, results_dir=None):
             total_loss["D_real"] = D_real.item()
             total_loss["D_fake"] = D_fake.item()
             total_loss["G_GAN"] = G_GAN.item()
-            # loss["G_criterion"] = G_criterion.item()
-
-            # l1 distance
-            e = torch.cdist(augmentation, fake_augmentation, p=1)
-            # log.debug(f"aug: {augmentation.size()}")
-            # log.debug(f"fake: {fake_augmentation.size()}")
-            # log.debug(f"e: {e.size()}")
-
-            e = e.mean()
-            # avg_e += e
+            # total_loss["G_criterion"] = G_criterion.item()
 
             for key, loss in total_loss.items():
                 mlflow.log_metric(key=f"val_{key}", value=loss, step=batch_idx)
-
-            # log.debug(f"val | batch: {batch_idx} | e: {e}")
+                
+            e = calculate_e(augmentation, fake_augmentation)
+            e = e.item()
             mlflow.log_metric(key=f"val_e", value=e, step=batch_idx)
 
-            if (batch_idx % len(loader) // 100) == 0:
-                log.debug(
-                    "val | batch: {} | e: {:.3f}, D_real: {:.3f}, D_fake: {:.3f}, G_GAN: {:.3f}".format(
-                        batch_idx,
-                        e,
-                        total_loss["D_real"],
-                        total_loss["D_fake"],
-                        total_loss["G_GAN"],
-                        # total_loss["G_criterion"],
-                    )
-                )
+            if batch_idx % 10 == 0:
+                log.debug(f"val | batch: {batch_idx} | e: {e}")
 
-    # total_loss["D_real"] /= len(loader)
-    # total_loss["D_fake"] /= len(loader)
-    # total_loss["G_GAN"] /= len(loader)
-    # total_loss["G_criterion"] /= len(loader)
-    # avg_e /= len(loader)
-
-    # for key, loss in total_loss.items():
-    #     mlflow.log_metric(key=f"val_{key}", value=loss, step=epoch)
-    # mlflow.log_metric(key=f"val_e", value=avg_e, step=epoch)
-
-    # if early_stopping:
-    #     assert results_dir
-    #     early_stopping(
-    #         epoch,
-    #         total_loss,
-    #         models,
-    #         ckpt_name=os.path.join(results_dir, "checkpoint.pt"),
-    #     )
-
-    #     if early_stopping.early_stop:
-    #         log.debug("Early stopping")
-    #         return True
-
-    # return False
+    return False
 
 
 def summary(models, loader, loss_fns):

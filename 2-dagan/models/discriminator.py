@@ -153,14 +153,13 @@ class DiscriminatorIndependentFast(nn.Module):
     ):
         super(DiscriminatorIndependentFast, self).__init__()
 
-        self.all_mlps = []
-        for _ in range(1):
-            mlp = nn.Sequential(nn.Linear(2, 4), nn.ReLU(), nn.Linear(4, 1))
-            # mlp = nn.Sequential(
-            #     nn.Linear(2, 1),
-            # )
-            self.all_mlps.append(mlp)
-        self.all_mlps = nn.ModuleList(self.all_mlps)
+        self.mlp = nn.Sequential(
+            nn.Linear(2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 8),
+            nn.ReLU(),
+            nn.Linear(8, 1)
+        )
 
     def forward(self, x, x_aug):
         """
@@ -176,43 +175,7 @@ class DiscriminatorIndependentFast(nn.Module):
         data = torch.permute(data, (1, 0, 2))  # feature first
         all_outputs = []
         for i in range(1024):
-            o = self.all_mlps[0](data[i, :, :])
-            all_outputs.append(o)
-        all_outputs = torch.cat(all_outputs, dim=1)
-        is_real = torch.mean(all_outputs, dim=1)
-        return is_real
-
-
-class DiscriminatorIndependent(nn.Module):
-    def __init__(
-        self, 
-        ):
-        super(DiscriminatorIndependent, self).__init__()
-
-        self.all_mlps = []
-        for _ in range(1024):
-            mlp = nn.Sequential(nn.Linear(2, 4), nn.ReLU(), nn.Linear(4, 1))
-            # mlp = nn.Sequential(
-            #     nn.Linear(2, 1),
-            # )
-            self.all_mlps.append(mlp)
-        self.all_mlps = nn.ModuleList(self.all_mlps)
-
-    def forward(self, x, x_aug):
-        """
-        Forward pass.
-            Args:
-                - x: original feature [B x 1024 x 1]
-                - z: augmented feature [B x 1024 x1]
-            Returns:
-                - is_real: if it's real of x [B x 1024]
-        """
-        x, x_aug = x.unsqueeze(2), x_aug.unsqueeze(2)
-        data = torch.cat([x, x_aug], dim=2)  # concat original and noise: B x 1024 x 2
-        data = torch.permute(data, (1, 0, 2))  # feature first
-        all_outputs = []
-        for i in range(1024):
-            o = self.all_mlps[i](data[i, :, :])
+            o = self.mlp(data[i, :, :])
             all_outputs.append(o)
         all_outputs = torch.cat(all_outputs, dim=1)
         is_real = torch.mean(all_outputs, dim=1)
