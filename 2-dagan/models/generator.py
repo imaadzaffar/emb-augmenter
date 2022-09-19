@@ -156,13 +156,27 @@ class GeneratorIndependentFast(nn.Module):
     ):
         super(GeneratorIndependentFast, self).__init__()
 
+        # self.mlp = nn.Sequential(
+        #     nn.Linear(2, 32),
+        #     nn.ReLU(),
+        #     nn.Linear(32, 8),
+        #     nn.ReLU(),
+        #     nn.Linear(8, 1)
+        # )
+
         self.mlp = nn.Sequential(
-            nn.Linear(2, 32),
+            nn.Linear(2, 64),
             nn.ReLU(),
-            nn.Linear(32, 8),
+            nn.Linear(64, 16),
+            nn.ReLU(),
+            nn.Linear(16, 8),
             nn.ReLU(),
             nn.Linear(8, 1)
         )
+
+        # self.mlp = nn.Sequential(
+        #     nn.Linear(2, 1, bias=False),
+        # )
 
     def forward(self, x, z):
         """
@@ -176,11 +190,17 @@ class GeneratorIndependentFast(nn.Module):
         x, z = x.unsqueeze(2), z.unsqueeze(2)
         data = torch.cat([x, z], dim=2)  # concat original and noise
         data = torch.permute(data, (1, 0, 2))  # seq len first
-        augmentations = []
-        for i in range(1024):
-            o = self.mlp(data[i, :, :])
-            augmentations.append(o)
-        augmentations = torch.cat(augmentations, dim=1)
+        # augmentations = []
+        # for i in range(1024):
+        #     o = self.mlp(data[i, :, :])
+        #     augmentations.append(o)
+        # augmentations = torch.cat(augmentations, dim=1)
+        # print('Data', data.shape)
+        augmentations = self.mlp(data)
+        augmentations = torch.permute(augmentations, (1, 0, 2)).squeeze()
+        # print('Augmentations', augmentations.shape)
+        # exit()
+
         return augmentations
 
 

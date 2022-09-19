@@ -153,32 +153,50 @@ class DiscriminatorIndependentFast(nn.Module):
     ):
         super(DiscriminatorIndependentFast, self).__init__()
 
+        # self.mlp = nn.Sequential(
+        #     nn.Linear(2, 32),
+        #     nn.ReLU(),
+        #     nn.Linear(32, 8),
+        #     nn.ReLU(),
+        #     nn.Linear(8, 1)
+        # )
+
         self.mlp = nn.Sequential(
-            nn.Linear(2, 32),
+            nn.Linear(2, 64),
             nn.ReLU(),
-            nn.Linear(32, 8),
+            nn.Linear(64, 16),
+            nn.ReLU(),
+            nn.Linear(16, 8),
             nn.ReLU(),
             nn.Linear(8, 1)
         )
+
+        # self.mlp = nn.Sequential(
+        #     nn.Linear(2, 1, bias=False),
+        # )
 
     def forward(self, x, x_aug):
         """
         Forward pass.
             Args:
                 - x: original feature [B x 1024 x 1]
-                - z: augmented feature [B x 1024 x1]
+                - x_aug: augmented feature [B x 1024 x1]
             Returns:
                 - is_real: if it's real of x [B x 1024]
         """
         x, x_aug = x.unsqueeze(2), x_aug.unsqueeze(2)
-        data = torch.cat([x, x_aug], dim=2)  # concat original and noise: B x 1024 x 2
+        data = torch.cat([x, x_aug], dim=2)  # concat original and augmentation: B x 1024 x 2
         data = torch.permute(data, (1, 0, 2))  # feature first
-        all_outputs = []
-        for i in range(1024):
-            o = self.mlp(data[i, :, :])
-            all_outputs.append(o)
-        all_outputs = torch.cat(all_outputs, dim=1)
-        is_real = torch.mean(all_outputs, dim=1)
+
+        # all_outputs = []
+        # for i in range(1024):
+        #     o = self.mlp(data[i, :, :])
+        #     all_outputs.append(o)
+        # all_outputs = torch.cat(all_outputs, dim=1)
+
+        out = self.mlp(data)
+        out = torch.permute(out, (1, 0, 2)).squeeze()
+        is_real = torch.mean(out, dim=1)
         return is_real
 
 
