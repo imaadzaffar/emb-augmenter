@@ -308,9 +308,7 @@ def train_loop(models, loader, optimizers, loss_fns):
             noise.to(device),
         )
 
-        fake_augmentation = models["net_G"].forward(
-            original, noise
-        )  # compute fake images: G(x, z)
+        fake_augmentation = models["net_G"].forward(original, noise)  # compute fake images: G(x, z)
 
         # update D
         set_requires_grad(models["net_D"], True)  # enable backprop for D
@@ -318,9 +316,9 @@ def train_loop(models, loader, optimizers, loss_fns):
         D_real, D_fake = calculate_losses_D(
             models["net_D"], loss_fns, original, augmentation, fake_augmentation
         )  # calculate gradients for D
-        # combine loss and calculate gradients
         D = (D_fake + D_real) * 0.5
         D.backward(retain_graph=True)
+        torch.nn.utils.clip_grad_norm_(models["net_D"].parameters(), 5.)
         optimizers["optim_D"].step()  # update D's weights
 
         # update G
@@ -331,12 +329,11 @@ def train_loop(models, loader, optimizers, loss_fns):
         G_GAN, G_criterion = calculate_losses_G(
             models["net_D"], loss_fns, original, augmentation, fake_augmentation
         )  # calculate gradients for G
-        # combine loss and calculate gradients
 
         G = G_GAN
         # G = G_GAN + G_criterion
         G.backward(retain_graph=True)
-
+        torch.nn.utils.clip_grad_norm_(models["net_G"].parameters(), 5.)
         optimizers["optim_G"].step()  # update G's weights
 
         total_loss["D_real"] = D_real.item()
