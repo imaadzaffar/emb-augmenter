@@ -7,6 +7,7 @@ from utils.utils import EarlyStopping, get_optim, get_split_loader, print_networ
 # ----> pytorch imports
 import torch
 import torch.nn as nn
+from torchmetrics import AUROC
 from torchmetrics.functional import auc
 
 # ----> general imports
@@ -150,7 +151,7 @@ def train_loop(epoch, cur, model, loader, optimizer, loss_fn):
     total_correct = 0
 
     for batch_idx, data in enumerate(loader):
-        log.debug(f"f{cur} e{epoch}, batch {batch_idx}")
+        # log.debug(f"f{cur} e{epoch}, batch {batch_idx}")
         patch_embs, label = data  # split data
 
         # set data on device
@@ -176,28 +177,34 @@ def train_loop(epoch, cur, model, loader, optimizer, loss_fn):
 
         # labels
         y.append(label.item())
-        y_probs.append(torch.max(Y_prob).item())
+        y_probs.append(Y_prob.squeeze())
         y_preds.append(torch.argmax(Y_prob).item())
 
-        if (batch_idx % 20) == 0:
-            log.debug(
-                "f{} e{}, batch {} | loss: {:.3f}, acc: {:.3f}, kappa: {:.3f}, auc: {:.3f}".format(
-                    cur,
-                    epoch,
-                    batch_idx,
-                    total_metrics["loss"],
-                    total_metrics["acc"],
-                    total_metrics["kappa"],
-                    total_metrics["auc"],
-                )
-            )
+        # if (batch_idx % 20) == 0:
+        #     log.debug(
+        #         "f{} e{}, batch {} | loss: {:.3f}, acc: {:.3f}, kappa: {:.3f}, auc: {:.3f}".format(
+        #             cur,
+        #             epoch,
+        #             batch_idx,
+        #             total_metrics["loss"],
+        #             total_metrics["acc"],
+        #             total_metrics["kappa"],
+        #             total_metrics["auc"],
+        #         )
+        #     )
 
     total_metrics["loss"] /= len(loader)
     total_metrics["acc"] = total_correct / total_num
     total_metrics["kappa"] = metrics.cohen_kappa_score(y, y_preds, weights="quadratic")
-    total_metrics["auc"] = auc(
-        torch.tensor(y).to(device), torch.tensor(y_probs).to(device), reorder=True
-    )
+
+    # AUC
+    auroc = AUROC(num_classes=6)
+    preds = torch.stack(y_probs, dim=0).to(device)
+    # log.debug(f"preds: {preds}")
+    target = torch.tensor(y).to(device)
+    # log.debug(f"size preds: {preds.size()}")
+    # log.debug(f"size target: {target.size()}")
+    total_metrics["auc"] = auroc(preds, target)
 
     log.debug(
         "f{} e{}, {} | loss: {:.3f}, acc: {:.3f}, kappa: {:.3f}, auc: {:.3f}".format(
@@ -249,7 +256,7 @@ def validate(cur, epoch, model, loader, early_stopping, loss_fn=None, results_di
 
             # labels
             y.append(label.item())
-            y_probs.append(torch.max(Y_prob).item())
+            y_probs.append(Y_prob.squeeze())
             y_preds.append(torch.argmax(Y_prob).item())
 
             # print(f"logits: {logits}, label: {label}")
@@ -257,9 +264,16 @@ def validate(cur, epoch, model, loader, early_stopping, loss_fn=None, results_di
     total_metrics["loss"] /= len(loader)
     total_metrics["acc"] = total_correct / total_num
     total_metrics["kappa"] = metrics.cohen_kappa_score(y, y_preds, weights="quadratic")
-    total_metrics["auc"] = auc(
-        torch.tensor(y).to(device), torch.tensor(y_probs).to(device), reorder=True
-    )
+    
+    # AUC
+    auroc = AUROC(num_classes=6)
+    preds = torch.stack(y_probs, dim=0).to(device)
+    # log.debug(f"preds: {preds}")
+    target = torch.tensor(y).to(device)
+    # log.debug(f"size preds: {preds.size()}")
+    # log.debug(f"size target: {target.size()}")
+    total_metrics["auc"] = auroc(preds, target)
+
 
     log.debug(
         "f{} e{}, {} | loss: {:.3f}, acc: {:.3f}, kappa: {:.3f}, auc: {:.3f}".format(
@@ -316,7 +330,7 @@ def summary(model, loader, loss_fn):
 
             # labels
             y.append(label.item())
-            y_probs.append(torch.max(Y_prob).item())
+            y_probs.append(Y_prob.squeeze())
             y_preds.append(torch.argmax(Y_prob).item())
 
             total_num += 1
@@ -329,9 +343,16 @@ def summary(model, loader, loss_fn):
     total_metrics["loss"] /= len(loader)
     total_metrics["acc"] = total_correct / total_num
     total_metrics["kappa"] = metrics.cohen_kappa_score(y, y_preds, weights="quadratic")
-    total_metrics["auc"] = auc(
-        torch.tensor(y).to(device), torch.tensor(y_probs).to(device), reorder=True
-    )
+    
+    # AUC
+    auroc = AUROC(num_classes=6)
+    preds = torch.stack(y_probs, dim=0).to(device)
+    # log.debug(f"preds: {preds}")
+    target = torch.tensor(y).to(device)
+    # log.debug(f"size preds: {preds.size()}")
+    # log.debug(f"size target: {target.size()}")
+    total_metrics["auc"] = auroc(preds, target)
+
 
     return total_metrics
 
