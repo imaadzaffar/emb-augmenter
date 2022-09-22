@@ -39,10 +39,8 @@ def aug_combined(image):
 def aug_rotation(image):
     """Augment image with rotation (int from 0 to 360)"""
 
-    random_angle = [90, 180, 270][random.randint(0, 2)]
-
     transform = A.Rotate(
-        (random_angle,) * 2,
+        (90,) * 2,
         border_mode=cv2.BORDER_CONSTANT,
         value=0,
         method="largest_box",

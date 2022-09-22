@@ -85,7 +85,6 @@ class WSIDatasetFactory:
                 labels=labels,
                 num_classes=self.num_classes,
                 augmentation=augmentation,
-                dagan=dagan
                 dagan_settings=dagan_settings
             )
         else:

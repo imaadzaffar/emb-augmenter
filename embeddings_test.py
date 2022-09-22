@@ -2,7 +2,6 @@
 # open 1 normal and 1 augmented embedding, compare cosine difference
 
 import os
-from stringprep import b1_set
 import numpy as np
 import torch
 import pandas as pd
