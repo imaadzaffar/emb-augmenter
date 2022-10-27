@@ -80,7 +80,7 @@ def aug_saturation(image):
 
     transform = A.HueSaturationValue(
         hue_shift_limit=0,
-        sat_shift_limit=(-30, +60),
+        sat_shift_limit=(+30, +30),
         val_shift_limit=0,
         always_apply=True,
     )

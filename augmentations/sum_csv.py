@@ -7,5 +7,6 @@ total_patches = df2['bag_size'].sum()
 total_aug = 10
 total_features = 1024
 
+print(len(df2["slide_id"]))
 print("total patches:", total_patches)
 print("total embeddings:", total_patches * total_aug * total_features)
